@@ -59,7 +59,7 @@ export const RiskTrendCard: React.FC<RiskTrendCardProps> = ({
         </div>
 
         {/* Chart Canvas */}
-        <div ref={wrapRef} className="relative mt-3 w-full">
+        <div ref={wrapRef} className="relative mt-3 w-full overflow-hidden">
           <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium mb-1">
             <span>FrostScore rata-rata harian</span>
             <span className="text-emerald-600 font-semibold">&ge;90 Sangat Baik</span>

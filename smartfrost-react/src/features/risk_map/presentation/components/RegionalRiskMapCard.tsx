@@ -185,7 +185,7 @@ export const RegionalRiskMapCard: React.FC<RegionalRiskMapCardProps> = ({
       </div>
 
       {/* Map Container */}
-      <div className="relative isolate h-[480px] w-full bg-[#E5F3F7]">
+      <div className="relative isolate h-[300px] sm:h-[380px] lg:h-[480px] w-full bg-[#E5F3F7]">
         {/* Floating bottom-left badge */}
         <div className="absolute bottom-4 left-4 z-1000 pointer-events-none rounded-full bg-white/95 backdrop-blur-md px-3.5 py-1.5 border border-slate-200/90 shadow-sm text-[11px] font-semibold text-slate-700">
           Peta distributor resmi &bull; realtime database

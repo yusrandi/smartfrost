@@ -133,7 +133,7 @@ export const TemperatureChartCard: React.FC<TemperatureChartCardProps> = ({
         </div>
 
         {/* Chart Area */}
-        <div ref={wrapRef} className="relative mt-4 w-full">
+        <div ref={wrapRef} className="relative mt-4 w-full overflow-hidden">
           <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium mb-1">
             <span>Suhu Udara Coldbox (&deg;C)</span>
             {humidityPct != null && (

@@ -55,8 +55,8 @@ export const PriorityReviewTable: React.FC<PriorityReviewTableProps> = ({
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+        <div className="overflow-x-auto scrollbar-thin">
+          <table className="w-full min-w-[640px] text-left text-xs">
             <thead>
               <tr className="bg-slate-50/70 border-b border-slate-100 text-[11px] font-bold text-slate-500">
                 <th className="py-3 px-5">Batch / muatan</th>

@@ -354,9 +354,9 @@ export const TrackingMapCard: React.FC<TrackingMapCardProps> = ({ batches, selec
       </div>
 
       {/* Main Map Canvas with Overlays */}
-      <div className="relative z-0 isolate h-[520px] w-full bg-[#E5F3F7]">
+      <div className="relative z-0 isolate h-[320px] sm:h-[420px] lg:h-[520px] w-full bg-[#E5F3F7]">
         {/* Top-Left Geographic Context Card */}
-        <div className="absolute top-4 left-4 z-1000 pointer-events-none rounded-xl bg-white/90 backdrop-blur-md px-3.5 py-2.5 border border-slate-200/80 shadow-sm max-w-[240px]">
+        <div className="hidden sm:block absolute top-4 left-4 z-1000 pointer-events-none rounded-xl bg-white/90 backdrop-blur-md px-3.5 py-2.5 border border-slate-200/80 shadow-sm max-w-[240px]">
           <div className="text-xs font-black text-slate-900">Kepulauan Pangkep</div>
           <div className="text-[10px] text-slate-500 mt-0.5 leading-snug">
             Posisi relatif geografis • jalur maritim antarpulau Spermonde
@@ -370,7 +370,7 @@ export const TrackingMapCard: React.FC<TrackingMapCardProps> = ({ batches, selec
         </div>
 
         {/* Bottom-Left Inset Box (Daerah Sorong / Ekstra-Regional) */}
-        <div className="absolute bottom-6 left-4 z-1000 pointer-events-none rounded-xl bg-white/90 backdrop-blur-md p-3 border border-slate-200/80 shadow-sm max-w-[230px]">
+        <div className="hidden sm:block absolute bottom-6 left-4 z-1000 pointer-events-none rounded-xl bg-white/90 backdrop-blur-md p-3 border border-slate-200/80 shadow-sm max-w-[230px]">
           <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
             Inset - Tidak dalam skala peta
           </div>

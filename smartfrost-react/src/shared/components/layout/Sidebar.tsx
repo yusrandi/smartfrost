@@ -7,7 +7,8 @@ import {
   Map as MapIcon, 
   FileText, 
   User,
-  LogOut
+  LogOut,
+  X
 } from 'lucide-react';
 import { NAVIGATION_ITEMS, APP_METADATA } from '../../../core/constants/navigation';
 import { useAuth } from '../../../features/auth/context/AuthContext';
@@ -15,9 +16,16 @@ import { useAuth } from '../../../features/auth/context/AuthContext';
 interface SidebarProps {
   activeTab: string;
   onTabChange: (tabId: string) => void;
+  isMobileOpen?: boolean;
+  onCloseMobile?: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
+export const Sidebar: React.FC<SidebarProps> = ({
+  activeTab,
+  onTabChange,
+  isMobileOpen = false,
+  onCloseMobile,
+}) => {
   const { user, logout } = useAuth();
 
   const getIcon = (iconName: string, isActive: boolean) => {
@@ -45,48 +53,70 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
     }
   };
 
-  return (
-    <aside className="w-64 shrink-0 bg-[#0F223A] border-r border-slate-800/80 flex flex-col justify-between min-h-screen text-slate-200 select-none">
+  const handleTabClick = (tabId: string) => {
+    onTabChange(tabId);
+    if (onCloseMobile) {
+      onCloseMobile();
+    }
+  };
+
+  // Reusable Sidebar Inner Content
+  const sidebarContent = (
+    <div className="flex flex-col justify-between h-full min-h-0 select-none">
       {/* Upper Area: Logo, Organization Card, Navigation Links */}
-      <div className="p-4 space-y-5">
+      <div className="p-4 space-y-4 overflow-y-auto">
         {/* Brand Logo Header */}
-        <div className="flex items-center gap-3 px-2 pt-2">
-          {/* Custom Cyan Hexagon / Radial Frost Icon */}
-          <div className="h-9 w-9 rounded-xl bg-gradient-to-tr from-cyan-600 to-sky-400 flex items-center justify-center shadow-md shadow-cyan-500/20 text-white font-black text-sm">
-            <svg
-              className="h-5 w-5 text-white"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <line x1="12" y1="2" x2="12" y2="22" />
-              <line x1="2" y1="12" x2="22" y2="12" />
-              <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
-              <line x1="19.07" y1="4.93" x2="4.93" y2="19.07" />
-              <circle cx="12" cy="12" r="3" fill="#0EA5E9" />
-            </svg>
+        <div className="flex items-center justify-between px-1 pt-1">
+          <div className="flex items-center gap-2.5">
+            {/* Custom Cyan Hexagon / Radial Frost Icon */}
+            <div className="h-9 w-9 rounded-xl bg-gradient-to-tr from-cyan-600 to-sky-400 flex items-center justify-center shadow-md shadow-cyan-500/20 text-white font-black text-sm shrink-0">
+              <svg
+                className="h-5 w-5 text-white"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <line x1="12" y1="2" x2="12" y2="22" />
+                <line x1="2" y1="12" x2="22" y2="12" />
+                <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+                <line x1="19.07" y1="4.93" x2="4.93" y2="19.07" />
+                <circle cx="12" cy="12" r="3" fill="#0EA5E9" />
+              </svg>
+            </div>
+
+            <div>
+              <div className="text-[14px] font-black tracking-wider text-white leading-tight">
+                {APP_METADATA.name}
+              </div>
+              <div className="text-[9px] font-bold tracking-widest text-cyan-400 uppercase">
+                {APP_METADATA.tagline}
+              </div>
+            </div>
           </div>
 
-          <div>
-            <div className="text-[15px] font-black tracking-wider text-white leading-tight">
-              {APP_METADATA.name}
-            </div>
-            <div className="text-[9.5px] font-bold tracking-widest text-cyan-400 uppercase">
-              {APP_METADATA.tagline}
-            </div>
-          </div>
+          {/* Mobile Close Button */}
+          {onCloseMobile && (
+            <button
+              type="button"
+              onClick={onCloseMobile}
+              className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+              aria-label="Tutup Menu"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          )}
         </div>
 
         {/* Dinas Perikanan Organization Card */}
-        <div className="rounded-xl bg-[#172E4C] border border-white/5 p-3.5 space-y-2.5">
+        <div className="rounded-xl bg-[#172E4C] border border-white/5 p-3 space-y-2">
           <div>
-            <div className="text-xs font-bold text-white tracking-tight">
-              {user?.agency || 'Dinas Perikanan Kabupaten Pangkep'}
+            <div className="text-xs font-bold text-white tracking-tight truncate">
+              {user?.agency || 'Dinas Perikanan Kab. Pangkep'}
             </div>
-            <div className="text-[11px] text-slate-400">
+            <div className="text-[11px] text-slate-400 truncate">
               {user?.region || 'Kabupaten Pangkep'}
             </div>
           </div>
@@ -107,15 +137,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
               <button
                 key={item.id}
                 type="button"
-                onClick={() => onTabChange(item.id)}
-                className={`group w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all duration-150 text-left cursor-pointer ${
+                onClick={() => handleTabClick(item.id)}
+                className={`group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all duration-150 text-left cursor-pointer ${
                   isActive
                     ? 'bg-[#1890C7] text-white shadow-md shadow-sky-900/20 font-bold'
                     : 'text-slate-300 hover:text-white hover:bg-white/[0.06]'
                 }`}
               >
                 {getIcon(item.iconName, isActive)}
-                <span>{item.label}</span>
+                <span className="truncate">{item.label}</span>
               </button>
             );
           })}
@@ -123,7 +153,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
       </div>
 
       {/* Sidebar Footer Notes & Logout */}
-      <div className="p-4 border-t border-slate-800/60 space-y-3">
+      <div className="p-4 border-t border-slate-800/60 space-y-3 shrink-0">
         <button
           type="button"
           onClick={logout}
@@ -133,13 +163,39 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange }) => {
           <span>Keluar dari Akun</span>
         </button>
 
-        <div className="text-[11px] text-slate-400 space-y-1 leading-relaxed px-1">
-          <p>{APP_METADATA.sidebarNote}</p>
+        <div className="text-[11px] text-slate-400 space-y-0.5 leading-relaxed px-1">
+          <p className="line-clamp-2">{APP_METADATA.sidebarNote}</p>
           <p className="text-[10px] text-slate-500 font-mono tracking-tight">
             {APP_METADATA.name} • {APP_METADATA.version}
           </p>
         </div>
       </div>
-    </aside>
+    </div>
+  );
+
+  return (
+    <>
+      {/* 1. Desktop Sidebar (Fixed Left on lg screen and up) */}
+      <aside className="hidden lg:flex w-64 shrink-0 bg-[#0F223A] border-r border-slate-800/80 flex-col min-h-screen text-slate-200">
+        {sidebarContent}
+      </aside>
+
+      {/* 2. Mobile Drawer & Backdrop (Mobile & Tablet < 1024px) */}
+      {isMobileOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden flex">
+          {/* Backdrop overlay */}
+          <div
+            className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs transition-opacity animate-in fade-in"
+            onClick={onCloseMobile}
+            aria-hidden="true"
+          />
+
+          {/* Off-canvas mobile drawer panel */}
+          <aside className="relative z-50 w-72 max-w-[85vw] bg-[#0F223A] text-slate-200 shadow-2xl flex flex-col h-full animate-in slide-in-from-left duration-200">
+            {sidebarContent}
+          </aside>
+        </div>
+      )}
+    </>
   );
 };

@@ -1,17 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Bell, ChevronDown, LogOut, User as UserIcon } from 'lucide-react';
+import { Bell, ChevronDown, LogOut, Menu, User as UserIcon } from 'lucide-react';
 import { useAuth } from '../../../features/auth/context/AuthContext';
 
 interface TopHeaderProps {
   currentTabLabel: string;
   parentBreadcrumb?: string;
   onNavigateProfile?: () => void;
+  onToggleMobileMenu?: () => void;
 }
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
   currentTabLabel,
   parentBreadcrumb = 'Ruang pantau',
   onNavigateProfile,
+  onToggleMobileMenu,
 }) => {
   const { user, logout } = useAuth();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -41,18 +43,31 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
   };
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-slate-200/80 bg-white/95 px-6 backdrop-blur-md">
-      {/* Breadcrumb Navigation */}
-      <nav className="flex items-center gap-2 text-xs">
-        <span className="text-slate-500 font-medium">{parentBreadcrumb}</span>
-        <span className="text-slate-400 font-light">/</span>
-        <span className="font-bold text-slate-900">{currentTabLabel}</span>
-      </nav>
+    <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-slate-200/80 bg-white/95 px-3.5 sm:px-6 backdrop-blur-md">
+      {/* Left side: Hamburger button (Mobile) + Breadcrumb Navigation */}
+      <div className="flex items-center gap-2 min-w-0">
+        {/* Mobile Hamburger Menu Toggle */}
+        <button
+          type="button"
+          onClick={onToggleMobileMenu}
+          className="lg:hidden p-2 rounded-xl text-slate-700 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer shrink-0"
+          aria-label="Buka Menu Navigasi"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+
+        {/* Breadcrumb Navigation */}
+        <nav className="flex items-center gap-1.5 text-xs truncate">
+          <span className="text-slate-500 font-medium hidden sm:inline">{parentBreadcrumb}</span>
+          <span className="text-slate-400 font-light hidden sm:inline">/</span>
+          <span className="font-bold text-slate-900 truncate">{currentTabLabel}</span>
+        </nav>
+      </div>
 
       {/* Right Controls: Data Mode Badge, Notification Bell, User Avatar */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-2 sm:gap-4 shrink-0">
         {/* Demonstration Mode Pill */}
-        <div className="hidden sm:inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3.5 py-1 text-xs font-medium text-slate-600 shadow-2xs">
+        <div className="hidden md:inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3.5 py-1 text-xs font-medium text-slate-600 shadow-2xs">
           <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
           <span>Data demonstrasi</span>
         </div>
@@ -72,9 +87,9 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           <button
             type="button"
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-            className="flex items-center gap-3 pl-2 border-l border-slate-200 hover:opacity-90 transition-opacity cursor-pointer text-left"
+            className="flex items-center gap-2 sm:gap-3 pl-2 border-l border-slate-200 hover:opacity-90 transition-opacity cursor-pointer text-left"
           >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-cyan-100 font-black text-xs text-cyan-800 shadow-2xs border border-cyan-200/60">
+            <div className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-full bg-cyan-100 font-black text-xs text-cyan-800 shadow-2xs border border-cyan-200/60">
               {user?.initials || 'RH'}
             </div>
             <div className="hidden md:block text-left leading-tight">
@@ -92,7 +107,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
           {isDropdownOpen && (
             <div className="absolute right-0 mt-2 w-56 rounded-2xl bg-white border border-slate-200/90 shadow-xl py-2 z-50 animate-in fade-in duration-150">
               <div className="px-4 py-2 border-b border-slate-100">
-                <p className="text-xs font-bold text-slate-900">{user?.name}</p>
+                <p className="text-xs font-bold text-slate-900 truncate">{user?.name}</p>
                 <p className="text-[10.5px] text-slate-500 truncate">{user?.email}</p>
                 <div className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold text-sky-700 bg-sky-50 px-2 py-0.5 rounded-md">
                   {user?.role}

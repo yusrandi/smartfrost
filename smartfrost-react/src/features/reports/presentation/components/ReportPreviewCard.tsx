@@ -146,28 +146,28 @@ export const ReportPreviewCard: React.FC<ReportPreviewCardProps> = ({ items, isL
 
         {/* Detail rows */}
         <div className="mt-4 space-y-2.5 text-xs">
-          <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-2 border-b border-slate-100">
             <span className="text-slate-500">Kondisi aman / waspada</span>
             <span className="font-extrabold text-slate-900">
               {lowRiskCount} batch aman (≥75) &bull; {midRiskCount} batch waspada (60–74)
             </span>
           </div>
 
-          <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-2 border-b border-slate-100">
             <span className="text-slate-500">Perjalanan aktif</span>
             <span className="font-extrabold text-slate-900">
               {inTransitCount} batch &bull; {delayedCount} data tertunda
             </span>
           </div>
 
-          <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-2 border-b border-slate-100">
             <span className="text-slate-500">Cakupan sensor</span>
             <span className="font-extrabold text-slate-900">
               {syncedCount} batch tersinkron real-time; {delayedCount} tertunda
             </span>
           </div>
 
-          <div className="flex items-center justify-between pb-1">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-1">
             <span className="text-slate-500">Sumber & integritas data</span>
             <span className="font-extrabold text-slate-900">
               Sensor IoT Realtime Database SMART-FROST

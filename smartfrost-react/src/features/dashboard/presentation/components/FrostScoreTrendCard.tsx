@@ -112,7 +112,7 @@ export const FrostScoreTrendCard: React.FC<FrostScoreTrendCardProps> = ({
         </div>
 
         {/* Chart Area */}
-        <div ref={wrapRef} className="relative mt-4 w-full">
+        <div ref={wrapRef} className="relative mt-4 w-full overflow-hidden">
           <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium mb-1">
             <span>FrostScore Risiko (0 - 100)</span>
             <div className="flex items-center gap-2 text-[10px]">
