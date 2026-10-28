@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "144256451538",
+    "firebase_url": "https://frost-score-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "frost-score",
+    "storage_bucket": "frost-score.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:144256451538:android:478d591b4d982e826bfe0b",
+        "android_client_info": {
+          "package_name": "com.use.smartfrost"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBQkp792yzJm4IF78E5RXab59J0lA5iLRI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

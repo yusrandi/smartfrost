@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "756152110954",
+    "project_id": "smartfrost-50322",
+    "storage_bucket": "smartfrost-50322.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:756152110954:android:2206285581817193179f13",
+        "android_client_info": {
+          "package_name": "com.use.smartfrost"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "756152110954-k5hv9pens4g5bprt0rmdcajv59oli7c5.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDiyVonfZr7Tvnw4pzIqRM0Y3fc2nm99xw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "756152110954-k5hv9pens4g5bprt0rmdcajv59oli7c5.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
