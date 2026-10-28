@@ -5,6 +5,7 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../core/services/frost_score_calculator.dart';
 import '../../../../core/widgets/status_badge.dart';
 import '../../../dispatch/data/services/firestore_dispatch_service.dart';
 import '../../../dispatch/domain/models/new_dispatch_data.dart';
@@ -455,53 +456,75 @@ class _ReceivingInspectionSheetState extends State<ReceivingInspectionSheet> {
 
                   // FrostScore Card
                   Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.all(AppSpacing.md),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF0F9FF),
-                        borderRadius: BorderRadius.circular(AppRadius.md),
-                        border: Border.all(color: const Color(0xFFBAE6FD)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
+                    child: Builder(
+                      builder: (context) {
+                        final scoreColor = FrostScoreCalculator.getStatusColor(widget.frostScore);
+                        final cat = FrostScoreCalculator.getCategory(widget.frostScore);
+                        return Container(
+                          padding: const EdgeInsets.all(AppSpacing.md),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF0F9FF),
+                            borderRadius: BorderRadius.circular(AppRadius.md),
+                            border: Border.all(color: const Color(0xFFBAE6FD)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Icon(
-                                LucideIcons.shieldCheck,
-                                size: 16,
-                                color: Color(0xFF0284C7),
+                              Row(
+                                children: [
+                                  Icon(
+                                    LucideIcons.shieldCheck,
+                                    size: 16,
+                                    color: scoreColor,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'FrostScore',
+                                    style: AppTypography.caption.copyWith(
+                                      color: const Color(0xFF075985),
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(width: 4),
+                              const SizedBox(height: 6),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.baseline,
+                                textBaseline: TextBaseline.alphabetic,
+                                children: [
+                                  Text(
+                                    '${widget.frostScore}',
+                                    style: AppTypography.cardTitle.copyWith(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w800,
+                                      color: scoreColor,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 2),
+                                  Text(
+                                    '/100',
+                                    style: AppTypography.caption.copyWith(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: const Color(0xFF64748B),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 2),
                               Text(
-                                'FrostScore',
+                                '${cat.label} • Rantai Dingin',
                                 style: AppTypography.caption.copyWith(
-                                  color: const Color(0xFF075985),
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 11,
+                                  color: scoreColor,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 10,
                                 ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 6),
-                          Text(
-                            '${widget.frostScore}%',
-                            style: AppTypography.cardTitle.copyWith(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              color: const Color(0xFF0369A1),
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Integritas rantai dingin',
-                            style: AppTypography.caption.copyWith(
-                              color: const Color(0xFF075985),
-                              fontSize: 10,
-                            ),
-                          ),
-                        ],
-                      ),
+                        );
+                      },
                     ),
                   ),
                 ],

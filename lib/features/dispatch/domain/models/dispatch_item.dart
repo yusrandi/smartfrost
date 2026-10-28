@@ -3,6 +3,7 @@ class DispatchItem {
   const DispatchItem({
     required this.id,
     required this.batchCode,
+    this.coolboxId = '',
     required this.fishType,
     required this.weightKg,
     required this.origin,
@@ -14,6 +15,7 @@ class DispatchItem {
 
   final String id;
   final String batchCode;
+  final String coolboxId;
   final String fishType;
   final double weightKg;
   final String origin;

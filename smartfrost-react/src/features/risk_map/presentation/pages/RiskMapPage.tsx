@@ -1,6 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, ChevronDown, RefreshCw, RotateCcw } from 'lucide-react';
-import { DashboardRtdbDatasource } from '../../../dashboard/data/datasources/dashboard_rtdb_datasource';
+import {
+  DashboardRtdbDatasource,
+  findCoolboxSuhu,
+  type CoolboxSuhuState,
+} from '../../../dashboard/data/datasources/dashboard_rtdb_datasource';
+import { FrostScoreCalculator } from '../../../dashboard/domain/services/frost_score_calculator';
 import type { DispatchSummaryItem } from '../../../dashboard/data/models/dashboard_types';
 import {
   DistributorRtdbDatasource,
@@ -18,6 +23,7 @@ const SELECT_CLASS =
 export const RiskMapPage: React.FC = () => {
   const [distributors, setDistributors] = useState<RtdbDistributor[]>([]);
   const [items, setItems] = useState<DispatchSummaryItem[]>([]);
+  const [suhuMap, setSuhuMap] = useState<Record<string, CoolboxSuhuState>>({});
   const [isLive, setIsLive] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(true);
   const [selectedRegionId, setSelectedRegionId] = useState<string>('');
@@ -53,9 +59,20 @@ export const RiskMapPage: React.FC = () => {
       }
     );
 
+    // 3. Subscribe to real `suhu` table for live cold-chain telemetry
+    const unsubSuhu = DashboardRtdbDatasource.subscribeToSuhuData(
+      (map) => {
+        setSuhuMap(map);
+      },
+      (err) => {
+        console.warn('RiskMap suhu RTDB notice:', err);
+      }
+    );
+
     return () => {
       if (typeof unsubDistributors === 'function') unsubDistributors();
       if (typeof unsubDispatches === 'function') unsubDispatches();
+      if (typeof unsubSuhu === 'function') unsubSuhu();
     };
   }, []);
 
@@ -67,25 +84,30 @@ export const RiskMapPage: React.FC = () => {
       }
       if (regionFilter !== 'Semua wilayah') {
         const matchesOrigin = item.origin.toLowerCase().includes(regionFilter.toLowerCase());
-        const matchesDest = item.destination.toLowerCase().includes(regionFilter.toLowerCase());
-        if (!matchesOrigin && !matchesDest) return false;
+        if (!matchesOrigin) return false;
       }
       if (statusFilter !== 'Semua status' && item.operationalStatus.toLowerCase() !== statusFilter.toLowerCase()) {
         return false;
       }
+
       if (riskFilter !== 'Semua tingkat') {
-        if (riskFilter.startsWith('Rendah') && item.frostScore >= 30) return false;
-        if (riskFilter.startsWith('Perhatian') && (item.frostScore < 30 || item.frostScore >= 60)) return false;
-        if (riskFilter.startsWith('Tinggi') && item.frostScore < 60) return false;
+        const boxSuhu = findCoolboxSuhu(suhuMap, item.coolboxId);
+        const score = boxSuhu?.frostScore?.score ?? item.frostScore;
+        const cat = FrostScoreCalculator.getCategory(score);
+        if (riskFilter === 'Sangat Baik' && cat !== 'Sangat Baik') return false;
+        if (riskFilter === 'Baik' && cat !== 'Baik') return false;
+        if (riskFilter === 'Waspada' && cat !== 'Waspada') return false;
+        if (riskFilter === 'Risiko Tinggi' && cat !== 'Risiko Tinggi') return false;
       }
+
       return true;
     });
-  }, [items, dateFilter, regionFilter, statusFilter, riskFilter]);
+  }, [items, dateFilter, regionFilter, statusFilter, riskFilter, suhuMap]);
 
-  // Dynamically compute regional risk summaries from pure RTDB `distributors` correlated with `dispatches`
+  // Dynamically compute regional risk summaries from pure RTDB `distributors` correlated with `dispatches` and `/suhu`
   const regions = useMemo(() => {
-    return aggregateDistributorsRisk(distributors, filteredItems);
-  }, [distributors, filteredItems]);
+    return aggregateDistributorsRisk(distributors, filteredItems, suhuMap);
+  }, [distributors, filteredItems, suhuMap]);
 
   // Keep selected region valid
   useEffect(() => {
@@ -94,14 +116,20 @@ export const RiskMapPage: React.FC = () => {
     }
   }, [regions, selectedRegionId]);
 
-  // Distinct region list for filter dropdown directly from database distributors
+  // Distinct sender regions from real items & distributor origins
   const availableOrigins = useMemo(() => {
     const set = new Set<string>();
+    items.forEach((item) => {
+      if (item.origin && item.origin !== '-') set.add(item.origin);
+    });
     distributors.forEach((d) => {
-      set.add(d.name || d.storeLocation);
+      const name = d.name || d.storeLocation;
+      if (name && !name.toLowerCase().includes('pangkajene')) {
+        set.add(name);
+      }
     });
     return Array.from(set);
-  }, [distributors]);
+  }, [items, distributors]);
 
   // Currently selected region
   const selectedRegion = useMemo(() => {
@@ -111,6 +139,10 @@ export const RiskMapPage: React.FC = () => {
   // Derived metrics from real database distributor data
   const coveredRegionsCount = regions.length;
 
+  const priorityRegionsCount = useMemo(() => {
+    return regions.filter((r) => r.highRiskCount > 0 || r.mediumRiskCount > 0).length;
+  }, [regions]);
+
   const priorityRegionsText = useMemo(() => {
     const highRiskRegions = regions.filter((r) => r.highRiskCount > 0);
     if (highRiskRegions.length >= 2) {
@@ -119,8 +151,12 @@ export const RiskMapPage: React.FC = () => {
     if (highRiskRegions.length === 1) {
       return highRiskRegions[0].name;
     }
+    const warnRegions = regions.filter((r) => r.mediumRiskCount > 0);
+    if (warnRegions.length > 0) {
+      return warnRegions[0].name;
+    }
     if (regions.length > 0) {
-      return `${regions[0].name}`;
+      return 'Semua wilayah aman';
     }
     return 'Belum ada data';
   }, [regions]);
@@ -146,6 +182,13 @@ export const RiskMapPage: React.FC = () => {
     setRiskFilter('Semua tingkat');
   };
 
+  const today = new Date().toLocaleDateString('id-ID', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+
   return (
     <div className="space-y-6">
       {/* Title & Synchronization Header */}
@@ -155,18 +198,20 @@ export const RiskMapPage: React.FC = () => {
             Peta risiko distribusi
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Pola risiko berdasarkan data pangkalan distributor resmi dari Realtime Database.
+            Pola risiko berdasarkan data pangkalan distributor resmi dari Realtime Database & telemetri IoT.
           </p>
         </div>
 
         <div className="text-left sm:text-right space-y-1">
           <div className="text-xs text-slate-600 font-medium">
-            Kamis, 22 Oktober 2026 - WITA
+            {today} - WITA
           </div>
           <div className="inline-flex items-center gap-1.5 text-[11px] text-teal-700 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-200/60 font-medium">
             <RefreshCw className={`h-3 w-3 text-teal-600 ${isSyncing ? 'animate-spin' : ''}`} />
             <span>
-              {isLive ? `Realtime Database Live (${distributors.length} distributor)` : 'Memuat data...'}
+              {isLive
+                ? `Realtime Database Live (${distributors.length} distributor • ${items.length} batch)`
+                : 'Memuat data...'}
             </span>
           </div>
         </div>
@@ -239,10 +284,11 @@ export const RiskMapPage: React.FC = () => {
               onChange={(e) => setRiskFilter(e.target.value)}
               className={SELECT_CLASS}
             >
-              <option value="Semua tingkat">Risiko: Semua tingkat</option>
-              <option value="Rendah">Rendah (0–29)</option>
-              <option value="Perhatian">Perlu perhatian (30–59)</option>
-              <option value="Tinggi">Tinggi (60–100)</option>
+              <option value="Semua tingkat">Tingkat Mutu: Semua tingkat</option>
+              <option value="Sangat Baik">Sangat Baik (Skor ≥90)</option>
+              <option value="Baik">Baik (Skor 75–89)</option>
+              <option value="Waspada">Waspada (Skor 60–74)</option>
+              <option value="Risiko Tinggi">Risiko Tinggi (Skor &lt;60)</option>
             </select>
             <ChevronDown className="pointer-events-none absolute right-3 top-3 h-3.5 w-3.5 text-slate-400" />
           </div>
@@ -268,6 +314,7 @@ export const RiskMapPage: React.FC = () => {
       {/* Top 3 Summary Metrics Cards */}
       <RiskMetricsCards
         coveredRegionsCount={coveredRegionsCount}
+        priorityRegionsCount={priorityRegionsCount}
         priorityRegionsText={priorityRegionsText}
         delayedBatchesCount={delayedBatchesCount}
       />
@@ -310,12 +357,6 @@ export const RiskMapPage: React.FC = () => {
           </div>
         </div>
       )}
-
-      {/* Bottom Footer Notice */}
-      {/* <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400 pt-2 pb-6">
-        <div>&copy; 2026 SMART-FROST &bull; Kabupaten Pangkep</div>
-        <div>Data murni dari tabel distributors Realtime Database</div>
-      </div> */}
     </div>
   );
 };

@@ -1,6 +1,8 @@
 import React from 'react';
 import { ArrowRight, ChevronLeft, ChevronRight, Inbox } from 'lucide-react';
 import type { DispatchSummaryItem } from '../../data/models/dashboard_types';
+import { findCoolboxSuhu, type CoolboxSuhuState } from '../../data/datasources/dashboard_rtdb_datasource';
+import { FrostScoreCalculator } from '../../domain/services/frost_score_calculator';
 
 interface RecentDispatchesTableProps {
   items: DispatchSummaryItem[];
@@ -11,6 +13,8 @@ interface RecentDispatchesTableProps {
   endIndex: number;
   onPageChange: (page: number) => void;
   onSelectBatch?: (item: DispatchSummaryItem) => void;
+  selectedBatchId?: string;
+  suhuMap?: Record<string, CoolboxSuhuState>;
   title?: string;
   showViewAll?: boolean;
 }
@@ -24,6 +28,8 @@ export const RecentDispatchesTable: React.FC<RecentDispatchesTableProps> = ({
   endIndex,
   onPageChange,
   onSelectBatch,
+  selectedBatchId,
+  suhuMap,
   title = 'Perjalanan terkini',
   showViewAll = true,
 }) => {
@@ -78,33 +84,48 @@ export const RecentDispatchesTable: React.FC<RecentDispatchesTableProps> = ({
             </thead>
             <tbody className="divide-y divide-slate-100">
               {items.map((item) => {
-                // FrostScore pill style
-                let scoreBadge = 'bg-emerald-50 text-emerald-700 border-emerald-200/60';
-                let scoreDot = 'bg-emerald-500';
-                if (item.riskLevel === 'Perhatian') {
-                  scoreBadge = 'bg-amber-50 text-amber-700 border-amber-200/60';
-                  scoreDot = 'bg-amber-500';
-                } else if (item.riskLevel === 'Tinggi') {
-                  scoreBadge = 'bg-rose-50 text-rose-700 border-rose-200/60';
-                  scoreDot = 'bg-rose-500';
-                }
+                const boxSuhu = suhuMap ? findCoolboxSuhu(suhuMap, item.coolboxId) : null;
+                const realTemp = boxSuhu?.latestAirTemp;
+                const realTime = boxSuhu?.lastTimestampStr;
+
+                // Ambil FrostScore dari kalkulasi RTDB /suhu atau dari Firestore
+                const calculatedScore = boxSuhu?.frostScore?.score;
+                const displayScore = calculatedScore != null ? calculatedScore : item.frostScore;
+                const hasTelemetry = boxSuhu != null && (boxSuhu.dataPoints.length > 0 || boxSuhu.latestAirTemp != null);
+
+                // Kategori dan style resmi SMART-FROST
+                const scoreCategory = FrostScoreCalculator.getCategory(displayScore);
+                const badgeStyle = FrostScoreCalculator.getBadgeStyle(displayScore);
 
                 // Sync status style
-                const isSynced = item.syncStatus === 'Tersinkron';
+                const isSynced = item.syncStatus === 'Tersinkron' || realTemp != null;
+                const isSelected = selectedBatchId ? (item.batchId === selectedBatchId || item.id === selectedBatchId) : false;
 
                 return (
                   <tr
                     key={item.id}
                     onClick={() => onSelectBatch?.(item)}
-                    className="hover:bg-slate-50/70 transition-colors cursor-pointer group"
+                    className={`transition-colors cursor-pointer group ${
+                      isSelected
+                        ? 'bg-sky-50/80 ring-1 ring-inset ring-sky-300'
+                        : 'hover:bg-slate-50/70'
+                    }`}
                   >
                     {/* Batch / Muatan */}
                     <td className="py-3.5 px-5">
-                      <div className="font-bold text-sky-600 font-mono tracking-tight group-hover:underline">
-                        {item.batchId}
+                      <div className="flex items-center gap-1.5 font-bold text-sky-600 font-mono tracking-tight group-hover:underline">
+                        <span>{item.batchId}</span>
+                        {isSelected && (
+                          <span className="text-[9px] font-bold text-sky-700 bg-sky-100/90 border border-sky-300/60 px-1.5 py-0.5 rounded-full font-sans">
+                            Terpilih
+                          </span>
+                        )}
                       </div>
-                      <div className="text-[11px] text-slate-500 mt-0.5">
-                        {item.commodity} &bull; {item.weightKg} kg
+                      <div className="text-[11px] text-slate-600 mt-0.5">
+                        {item.commodity} &bull; {item.weightDisplay || `${item.weightKg} kg`}
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                        {boxSuhu?.coolboxId || item.coolboxId}
                       </div>
                     </td>
 
@@ -119,22 +140,44 @@ export const RecentDispatchesTable: React.FC<RecentDispatchesTableProps> = ({
                       </div>
                     </td>
 
-                    {/* Suhu Terakhir */}
+                    {/* Suhu Terakhir (Suhu valid dari tabel /suhu) */}
                     <td className="py-3.5 px-5">
-                      <div className="font-bold text-slate-900 font-mono">
-                        {item.lastTemp.toFixed(1).replace('.', ',')} &deg;C
-                      </div>
-                      <div className="text-[11px] text-slate-400 mt-0.5">
-                        {item.lastTempTime}
-                      </div>
+                      {realTemp != null ? (
+                        <>
+                          <div className="font-bold text-slate-900 font-mono flex items-center gap-1.5">
+                            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                            <span>{realTemp.toFixed(1).replace('.', ',')} &deg;C</span>
+                          </div>
+                          <div className="text-[11px] text-slate-400 mt-0.5">
+                            {realTime || item.lastTempTime}
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="font-medium text-slate-400 text-xs flex items-center gap-1.5">
+                            <span className="h-1.5 w-1.5 rounded-full bg-slate-300" />
+                            <span>Menunggu sensor</span>
+                          </div>
+                          <div className="text-[11px] text-slate-400 mt-0.5">
+                            Coldbox siap kirim
+                          </div>
+                        </>
+                      )}
                     </td>
 
-                    {/* FrostScore */}
+                    {/* FrostScore (Rumus Resmi PDF: 90-100 Sangat Baik, 75-89 Baik, 60-74 Waspada, <60 Risiko Tinggi) */}
                     <td className="py-3.5 px-5">
-                      <div className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold border ${scoreBadge}`}>
-                        <span className={`h-1.5 w-1.5 rounded-full ${scoreDot}`} />
-                        <span>{item.frostScore} &bull; {item.riskLevel}</span>
-                      </div>
+                      {!hasTelemetry && (item.frostScore === 0 || item.frostScore == null) ? (
+                        <div className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold border bg-slate-50 text-slate-600 border-slate-200/60">
+                          <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                          <span>Menunggu sensor</span>
+                        </div>
+                      ) : (
+                        <div className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold border ${badgeStyle.badgeClass}`}>
+                          <span className={`h-1.5 w-1.5 rounded-full ${badgeStyle.dotClass}`} />
+                          <span>{displayScore} &bull; {scoreCategory}</span>
+                        </div>
+                      )}
                     </td>
 
                     {/* Sinkronisasi */}
@@ -145,9 +188,9 @@ export const RecentDispatchesTable: React.FC<RecentDispatchesTableProps> = ({
                           : 'bg-amber-50 text-amber-700 border-amber-200/80'
                       }`}>
                         <span className={`h-1.5 w-1.5 rounded-full ${
-                          isSynced ? 'bg-slate-400' : 'bg-amber-500'
+                          isSynced ? 'bg-emerald-500' : 'bg-amber-500'
                         }`} />
-                        <span>{item.syncStatus}</span>
+                        <span>{isSynced ? 'Tersinkron' : item.syncStatus}</span>
                       </div>
                     </td>
 

@@ -10,7 +10,10 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../auth/domain/services/auth_session.dart';
+import '../../../../core/services/frost_score_calculator.dart';
 import '../../../dispatch/data/services/firestore_dispatch_service.dart';
+import '../../../dispatch/domain/models/coolbox_history_reading.dart';
+import '../../../dispatch/presentation/widgets/dispatch_temperature_history_card.dart';
 import '../../../dispatch/presentation/widgets/dispatch_tracking_map_card.dart';
 
 /// Full-screen Detail Batch view for the Receiving (Penerimaan) module.
@@ -330,15 +333,20 @@ class _ReceivingDetailPageState extends State<ReceivingDetailPage> {
               ),
               const SizedBox(height: AppSpacing.md),
 
-              // 3. Sensor Suhu Card with Timeline Line Chart
-              _TemperatureSectionCard(
-                currentTemperature: _currentTemperature,
+              // 3. Sensor Suhu Card with Timeline Line Chart (Live Realtime IoT Telemetry)
+              DispatchTemperatureHistoryCard(
+                coolboxId: widget.coolboxId,
+                batchId: widget.batchId,
+                isReceiver: true,
               ),
               const SizedBox(height: AppSpacing.md),
 
-              // 4. FrostScore Real-Time Analysis Card
+              // 4. FrostScore Real-Time Analysis Card (Live from Coolbox History)
               _FrostScoreAnalysisCard(
+                coolboxId: widget.coolboxId,
+                batchId: widget.batchId,
                 frostScore: _currentFrostScore,
+                temperature: _currentTemperature,
               ),
               const SizedBox(height: AppSpacing.md),
 
@@ -410,8 +418,14 @@ class _ReceivingDetailPageState extends State<ReceivingDetailPage> {
               _currentTemperature =
                   (data['temperature'] as num?)?.toDouble() ??
                       _currentTemperature;
-              _currentFrostScore =
-                  (data['frostScore'] as num?)?.toInt() ?? _currentFrostScore;
+              final parsedScore = (data['frostScore'] as num?)?.toInt();
+              if (parsedScore != null) {
+                _currentFrostScore = parsedScore;
+              } else if (_currentTemperature > FrostScoreCalculator.safeTempLimit) {
+                _currentFrostScore = FrostScoreCalculator.calculateSingleSnapshot(
+                  _currentTemperature,
+                ).scoreInt;
+              }
             }
           }
           return buildScaffold();
@@ -712,488 +726,250 @@ class _TripInfoCard extends StatelessWidget {
 }
 
 // ============================================================================
-// 3. SENSOR SUHU CARD WITH INTERACTIVE LINE CHART
-// ============================================================================
-class _TemperatureSectionCard extends StatelessWidget {
-  const _TemperatureSectionCard({
-    required this.currentTemperature,
-  });
-
-  final double currentTemperature;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header: SENSOR SUHU + Live Badge
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Text(
-                    'SENSOR SUHU',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      color: Color(0xFF0891B2),
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                  SizedBox(height: 2),
-                  Text(
-                    'Riwayat suhu',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF0F172A),
-                    ),
-                  ),
-                ],
-              ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFDCFCE7),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Text(
-                  'Live',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF16A34A),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.md),
-
-          // Current Temp Display Box
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF10B981),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '${currentTemperature.toStringAsFixed(1)}°C',
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF0F172A),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'Suhu terakhir • 00:45',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Color(0xFF64748B),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFDCFCE7),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: const Text(
-                    'Zona aman',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF15803D),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: AppSpacing.md),
-
-          // Custom Temperature Curve Chart
-          Container(
-            height: 160,
-            width: double.infinity,
-            padding: const EdgeInsets.only(top: 8, bottom: 4),
-            child: CustomPaint(
-              painter: _TemperatureChartPainter(),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-
-          // Footnote
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
-              Icon(
-                LucideIcons.info,
-                size: 13,
-                color: Color(0xFF0891B2),
-              ),
-              SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  'Riwayat tersimpan bersama batch dan diperbarui setiap kali sensor coldbox mengirim data.',
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    color: Color(0xFF64748B),
-                    height: 1.3,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TemperatureChartPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final chartHeight = size.height - 24;
-    final w = size.width;
-
-    // Grid horizontal reference dashed line for "Batas aman 4°C"
-    final safeY = chartHeight * 0.45;
-    final dashPaint = Paint()
-      ..color = const Color(0xFFFB923C)
-      ..strokeWidth = 1.2
-      ..style = PaintingStyle.stroke;
-
-    double curX = 0;
-    while (curX < w) {
-      canvas.drawLine(
-        Offset(curX, safeY),
-        Offset(math.min(curX + 6, w), safeY),
-        dashPaint,
-      );
-      curX += 10;
-    }
-
-    // Text label for "Batas aman 4°C"
-    const textSpan = TextSpan(
-      text: 'Batas aman 4°C',
-      style: TextStyle(
-        color: Color(0xFFEA580C),
-        fontSize: 9.5,
-        fontWeight: FontWeight.w600,
-      ),
-    );
-    final textPainter = TextPainter(
-      text: textSpan,
-      textDirection: TextDirection.ltr,
-    )..layout();
-    textPainter.paint(canvas, Offset(w - textPainter.width - 4, safeY - 14));
-
-    // Points on the line chart (4 intervals: 00:00, 00:15, 00:30, 00:45)
-    final points = [
-      Offset(w * 0.12, chartHeight * 0.45), // 00:00 -> 4.0°C
-      Offset(w * 0.38, chartHeight * 0.30), // 00:15 -> 4.6°C (anomaly)
-      Offset(w * 0.65, chartHeight * 0.65), // 00:30 -> 2.5°C
-      Offset(w * 0.90, chartHeight * 0.45), // 00:45 -> 4.0°C
-    ];
-
-    // Draw connecting path
-    final linePaint = Paint()
-      ..color = const Color(0xFF0891B2)
-      ..strokeWidth = 2.5
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-
-    final path = Path()..moveTo(points[0].dx, points[0].dy);
-    for (int i = 1; i < points.length; i++) {
-      path.lineTo(points[i].dx, points[i].dy);
-    }
-    canvas.drawPath(path, linePaint);
-
-    // Draw Data Point Nodes
-    for (int i = 0; i < points.length; i++) {
-      final isAnomaly = (i == 1);
-      final dotPaint = Paint()
-        ..color = isAnomaly ? const Color(0xFFEF4444) : const Color(0xFF0891B2)
-        ..style = PaintingStyle.fill;
-
-      // Outer halo
-      final haloPaint = Paint()
-        ..color = (isAnomaly ? const Color(0xFFEF4444) : const Color(0xFF0891B2))
-            .withValues(alpha: 0.25)
-        ..style = PaintingStyle.fill;
-
-      canvas.drawCircle(points[i], 7, haloPaint);
-      canvas.drawCircle(points[i], 4, dotPaint);
-    }
-
-    // X-Axis Time Labels
-    final times = ['00:00', '00:15', '00:30', '00:45'];
-    for (int i = 0; i < times.length; i++) {
-      final tSpan = TextSpan(
-        text: times[i],
-        style: const TextStyle(
-          color: Color(0xFF94A3B8),
-          fontSize: 10,
-          fontWeight: FontWeight.w500,
-        ),
-      );
-      final tPainter = TextPainter(
-        text: tSpan,
-        textDirection: TextDirection.ltr,
-      )..layout();
-      tPainter.paint(
-        canvas,
-        Offset(points[i].dx - (tPainter.width / 2), chartHeight + 6),
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-// ============================================================================
 // 4. FROSTSCORE REAL-TIME ANALYSIS CARD
 // ============================================================================
 class _FrostScoreAnalysisCard extends StatelessWidget {
   const _FrostScoreAnalysisCard({
-    required this.frostScore,
+    required this.coolboxId,
+    required this.batchId,
+    this.frostScore = 96,
+    this.temperature,
   });
 
+  final String coolboxId;
+  final String batchId;
   final int frostScore;
+  final double? temperature;
 
   @override
   Widget build(BuildContext context) {
-    final penalty = (100 - frostScore).toDouble();
-    String qualityText = 'Baik';
-    if (frostScore >= 90) {
-      qualityText = 'Sangat Baik';
-    } else if (frostScore >= 75) {
-      qualityText = 'Baik';
-    } else if (frostScore >= 60) {
-      qualityText = 'Waspada';
-    } else {
-      qualityText = 'Risiko Tinggi';
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+    return StreamBuilder<List<CoolboxHistoryReading>>(
+      stream: FirestoreDispatchService.instance.streamCoolboxTemperatureHistory(
+        coolboxId,
+        batchId: batchId,
+        isReceiver: true,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Circular Progress Gauge Header
-          Row(
-            children: [
-              SizedBox(
-                width: 66,
-                height: 66,
-                child: CustomPaint(
-                  painter: _FrostScoreGaugePainter(score: frostScore),
-                  child: Center(
-                    child: RichText(
-                      text: TextSpan(
-                        children: [
-                          TextSpan(
-                            text: '$frostScore',
-                            style: const TextStyle(
-                              color: Color(0xFF0F172A),
-                              fontSize: 21,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const TextSpan(
-                            text: '/100',
-                            style: TextStyle(
-                              color: Color(0xFF64748B),
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'FROSTSCORE • REAL-TIME',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF0891B2),
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      qualityText,
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF0F172A),
-                      ),
-                    ),
-                    const SizedBox(height: 1),
-                    Text(
-                      '100 - ${penalty.toStringAsFixed(2)} total penalti',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: Color(0xFF64748B),
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.md),
+      builder: (context, snapshot) {
+        final readings = snapshot.data ?? const [];
+        final hasReadings = readings.isNotEmpty;
 
-          // 4 Grid Metric Penalty Cards (Thermal, Exposure, Stability, Anomaly)
-          Row(
-            children: [
-              _buildPenaltyCard('Thermal', '40%', '20.00'),
-              const SizedBox(width: 6),
-              _buildPenaltyCard('Exposure', '25%', '25.00'),
-              const SizedBox(width: 6),
-              _buildPenaltyCard('Stability', '15%', '26.67'),
-              const SizedBox(width: 6),
-              _buildPenaltyCard('Anomaly', '20%', '33.33'),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.sm),
+        final FrostScoreResult res;
+        if (hasReadings) {
+          final temps = readings.map((r) => r.airTemperatureC).toList();
+          res = FrostScoreCalculator.calculateFromTemperatures(temps);
+        } else if (temperature != null && temperature! > FrostScoreCalculator.safeTempLimit) {
+          res = FrostScoreCalculator.calculateSingleSnapshot(temperature!);
+        } else {
+          final displayScore = frostScore.clamp(0, 100);
+          final penalty = (100 - displayScore).toDouble().clamp(0.0, 100.0);
+          res = FrostScoreResult(
+            score: displayScore.toDouble(),
+            pTotal: penalty,
+            pThermal: penalty,
+            pExposure: penalty,
+            pStability: penalty,
+            pAnomaly: penalty,
+            category: FrostScoreCalculator.getCategory(displayScore),
+          );
+        }
 
-          // Formula Box (Ptotal)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF0F9FF),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFFE0F2FE)),
-            ),
-            child: RichText(
-              text: TextSpan(
+        final displayScore = res.scoreInt;
+        final penalty = res.pTotal;
+        final pThermal = res.pThermal;
+        final pExposure = res.pExposure;
+        final pStability = res.pStability;
+        final pAnomaly = res.pAnomaly;
+        final qualityText = res.category.label;
+        final qualityColor = res.statusColor;
+
+        return Container(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Circular Progress Gauge Header
+              Row(
                 children: [
-                  const TextSpan(
-                    text: 'Ptotal  ',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF0369A1),
+                  SizedBox(
+                    width: 66,
+                    height: 66,
+                    child: CustomPaint(
+                      painter: _FrostScoreGaugePainter(score: displayScore),
+                      child: Center(
+                        child: RichText(
+                          text: TextSpan(
+                            children: [
+                              TextSpan(
+                                text: '$displayScore',
+                                style: TextStyle(
+                                  color: qualityColor,
+                                  fontSize: 21,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              const TextSpan(
+                                text: '/100',
+                                style: TextStyle(
+                                  color: Color(0xFF64748B),
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
                   ),
-                  TextSpan(
-                    text:
-                        '(0,40 × 20) + (0,25 × 25) + (0,15 × 26.67) + (0,20 × 33.33) = ${penalty.toStringAsFixed(2)}',
-                    style: const TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w500,
-                      color: Color(0xFF0284C7),
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'FROSTSCORE • REAL-TIME',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xFF0891B2),
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          qualityText,
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            color: qualityColor,
+                          ),
+                        ),
+                        const SizedBox(height: 1),
+                        Text(
+                          '100 - ${penalty.toStringAsFixed(2)} total penalti',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFF64748B),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.md),
+              const SizedBox(height: AppSpacing.md),
 
-          // 4-Color Category Range Bar
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: Row(
-              children: [
-                _buildRangeSegment(
-                  'Sangat Baik',
-                  '90-100',
-                  const Color(0xFF0E8367),
-                ),
-                _buildRangeSegment(
-                  'Baik',
-                  '75-89',
-                  const Color(0xFF70A83B),
-                ),
-                _buildRangeSegment(
-                  'Waspada',
-                  '60-74',
-                  const Color(0xFFD97706),
-                ),
-                _buildRangeSegment(
-                  'Risiko Tinggi',
-                  '0-59',
-                  const Color(0xFFDC2626),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-
-          // Footnote
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
-              Icon(
-                LucideIcons.info,
-                size: 13,
-                color: Color(0xFF0891B2),
+              // 4 Grid Metric Penalty Cards (Thermal, Exposure, Stability, Anomaly)
+              Row(
+                children: [
+                  _buildPenaltyCard('Thermal', '40%', pThermal.toStringAsFixed(1)),
+                  const SizedBox(width: 6),
+                  _buildPenaltyCard('Exposure', '25%', pExposure.toStringAsFixed(1)),
+                  const SizedBox(width: 6),
+                  _buildPenaltyCard('Stability', '15%', pStability.toStringAsFixed(1)),
+                  const SizedBox(width: 6),
+                  _buildPenaltyCard('Anomaly', '20%', pAnomaly.toStringAsFixed(1)),
+                ],
               ),
-              SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  'Dihitung ulang otomatis dari kondisi suhu coldbox terbaru. Indikator risiko, bukan sertifikat keamanan pangan.',
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    color: Color(0xFF64748B),
-                    height: 1.3,
+              const SizedBox(height: AppSpacing.sm),
+
+              // Formula Box (Ptotal)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF0F9FF),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFE0F2FE)),
+                ),
+                child: RichText(
+                  text: TextSpan(
+                    children: [
+                      const TextSpan(
+                        text: 'Ptotal  ',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF0369A1),
+                        ),
+                      ),
+                      TextSpan(
+                        text:
+                            '(0,40 × ${pThermal.toStringAsFixed(1)}) + (0,25 × ${pExposure.toStringAsFixed(1)}) + (0,15 × ${pStability.toStringAsFixed(1)}) + (0,20 × ${pAnomaly.toStringAsFixed(1)}) = ${penalty.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFF0284C7),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
+              const SizedBox(height: AppSpacing.md),
+
+              // 4-Color Category Range Bar
+              ClipRRect(
+                borderRadius: BorderRadius.circular(6),
+                child: Row(
+                  children: [
+                    _buildRangeSegment(
+                      'Sangat Baik',
+                      '90-100',
+                      const Color(0xFF0E8367),
+                    ),
+                    _buildRangeSegment(
+                      'Baik',
+                      '75-89',
+                      const Color(0xFF70A83B),
+                    ),
+                    _buildRangeSegment(
+                      'Waspada',
+                      '60-74',
+                      const Color(0xFFD97706),
+                    ),
+                    _buildRangeSegment(
+                      'Risiko Tinggi',
+                      '0-59',
+                      const Color(0xFFDC2626),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+
+              // Footnote
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: const [
+                  Icon(
+                    LucideIcons.info,
+                    size: 13,
+                    color: Color(0xFF0891B2),
+                  ),
+                  SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Formula: FrostScore = max(0, 100 - P_total) sesuai regulasi rantai dingin SMART-FROST.',
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        color: Color(0xFF64748B),
+                        height: 1.3,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -1295,8 +1071,9 @@ class _FrostScoreGaugePainter extends CustomPainter {
       ..strokeWidth = 6
       ..style = PaintingStyle.stroke;
 
+    final gaugeColor = FrostScoreCalculator.getStatusColor(score);
     final progressPaint = Paint()
-      ..color = const Color(0xFF0891B2)
+      ..color = gaugeColor
       ..strokeWidth = 6
       ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke;

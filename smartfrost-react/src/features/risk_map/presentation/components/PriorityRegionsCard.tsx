@@ -15,7 +15,8 @@ export const PriorityRegionsCard: React.FC<PriorityRegionsCardProps> = ({
   return (
     <div className="rounded-2xl bg-white border border-slate-200/80 p-5 shadow-2xs">
       <div className="border-b border-slate-100 pb-3">
-        <h3 className="text-base font-bold text-slate-900">Wilayah prioritas</h3>
+        <h3 className="text-base font-bold text-slate-900">Wilayah prioritas pengirim</h3>
+        <p className="text-xs text-slate-500 mt-0.5">Berdasarkan pangkalan asal pengiriman</p>
       </div>
 
       <div className="mt-3 divide-y divide-slate-100 max-h-[320px] overflow-y-auto pr-1">
@@ -37,7 +38,7 @@ export const PriorityRegionsCard: React.FC<PriorityRegionsCardProps> = ({
                   {region.name}
                 </span>
                 <span className="text-xs font-semibold text-slate-500">
-                  {region.batchCount} batch
+                  {region.batchCount} batch dikirim
                 </span>
               </div>
 

@@ -4,6 +4,12 @@ import { TemperatureChartCard } from '../../../dashboard/presentation/components
 import { RecentDispatchesTable } from '../../../dashboard/presentation/components/RecentDispatchesTable';
 import { MOCK_DISPATCH_ITEMS, MOCK_TEMPERATURE_POINTS } from '../../../dashboard/data/mock/dashboard_mock_data';
 import type { DispatchSummaryItem, TemperatureDataPoint } from '../../../dashboard/data/models/dashboard_types';
+import {
+  DashboardRtdbDatasource,
+  findCoolboxSuhu,
+  type CoolboxSuhuState,
+} from '../../../dashboard/data/datasources/dashboard_rtdb_datasource';
+import { FrostScoreCalculator } from '../../../dashboard/domain/services/frost_score_calculator';
 import { MonitoringRtdbDatasource } from '../../data/datasources/monitoring_rtdb_datasource';
 import type { MonitoringBatch } from '../../data/models/monitoring_types';
 import { TrackingMapCard } from '../components/TrackingMapCard';
@@ -30,6 +36,7 @@ function mockBatches(): MonitoringBatch[] {
 
 export const MonitoringPage: React.FC = () => {
   const [batches, setBatches] = useState<MonitoringBatch[]>(mockBatches);
+  const [suhuMap, setSuhuMap] = useState<Record<string, CoolboxSuhuState>>({});
   const [isLive, setIsLive] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -42,7 +49,7 @@ export const MonitoringPage: React.FC = () => {
   const [page, setPage] = useState<number>(1);
 
   useEffect(() => {
-    const unsubscribe = MonitoringRtdbDatasource.subscribe(
+    const unsubMonitoring = MonitoringRtdbDatasource.subscribe(
       (liveBatches, liveStatus) => {
         if (liveBatches.length > 0) {
           setBatches(liveBatches);
@@ -62,8 +69,18 @@ export const MonitoringPage: React.FC = () => {
       }
     );
 
+    const unsubSuhu = DashboardRtdbDatasource.subscribeToSuhuData(
+      (map) => {
+        setSuhuMap(map);
+      },
+      (err) => {
+        console.warn('Monitoring suhu notice:', err);
+      }
+    );
+
     return () => {
-      if (typeof unsubscribe === 'function') unsubscribe();
+      if (typeof unsubMonitoring === 'function') unsubMonitoring();
+      if (typeof unsubSuhu === 'function') unsubSuhu();
     };
   }, []);
 
@@ -89,12 +106,21 @@ export const MonitoringPage: React.FC = () => {
       if (statusFilter !== 'Semua status' && item.operationalStatus.toLowerCase() !== statusFilter.toLowerCase()) {
         return false;
       }
-      if (riskFilter !== 'Semua tingkat' && item.riskLevel.toLowerCase() !== riskFilter.toLowerCase()) {
-        return false;
+
+      // Filter berdasarkan kategori resmi FrostScore
+      if (riskFilter !== 'Semua tingkat') {
+        const boxSuhu = findCoolboxSuhu(suhuMap, item.coolboxId);
+        const score = boxSuhu?.frostScore?.score ?? item.frostScore;
+        const cat = FrostScoreCalculator.getCategory(score);
+        if (riskFilter === 'Sangat Baik' && cat !== 'Sangat Baik') return false;
+        if (riskFilter === 'Baik' && cat !== 'Baik') return false;
+        if (riskFilter === 'Waspada' && cat !== 'Waspada') return false;
+        if (riskFilter === 'Risiko Tinggi' && cat !== 'Risiko Tinggi') return false;
       }
+
       return true;
     });
-  }, [batches, dateFilter, regionFilter, statusFilter, riskFilter]);
+  }, [batches, dateFilter, regionFilter, statusFilter, riskFilter, suhuMap]);
 
   useEffect(() => {
     setPage(1);
@@ -105,18 +131,29 @@ export const MonitoringPage: React.FC = () => {
     return batches.find((b) => b.summary.id === selectedId) ?? batches[0] ?? null;
   }, [batches, selectedId]);
 
-  // Temperature data resolution: tracking_logs or fallback mock
+  // Active coolbox suhu state from RTDB /suhu
+  const selectedCoolboxId = selectedBatch?.summary.coolboxId || '';
+  const activeSuhu = useMemo(() => {
+    if (!selectedCoolboxId) return null;
+    return findCoolboxSuhu(suhuMap, selectedCoolboxId);
+  }, [suhuMap, selectedCoolboxId]);
+
+  // Temperature data resolution: priority on live IoT RTDB /suhu dataPoints
   const temperatureSeries: TemperatureDataPoint[] = useMemo(() => {
-    if (!selectedBatch) return MOCK_TEMPERATURE_POINTS;
-    const validLogs = selectedBatch.logs.filter((l) => typeof l.temperature === 'number');
-    if (validLogs.length >= 2) {
-      return validLogs.map((l) => ({
-        time: l.timeLabel,
-        temp: l.temperature as number,
-      }));
+    if (activeSuhu && activeSuhu.dataPoints.length > 0) {
+      return activeSuhu.dataPoints;
+    }
+    if (selectedBatch) {
+      const validLogs = selectedBatch.logs.filter((l) => typeof l.temperature === 'number');
+      if (validLogs.length >= 2) {
+        return validLogs.map((l) => ({
+          time: l.timeLabel,
+          temp: l.temperature as number,
+        }));
+      }
     }
     return MOCK_TEMPERATURE_POINTS;
-  }, [selectedBatch]);
+  }, [activeSuhu, selectedBatch]);
 
   // Pagination for the bottom table
   const filteredItems: DispatchSummaryItem[] = useMemo(
@@ -151,6 +188,17 @@ export const MonitoringPage: React.FC = () => {
   ).length;
   const delayedCount = batches.filter((b) => b.summary.syncStatus === 'Tertunda').length;
 
+  const chartSubtitle = selectedBatch
+    ? `${selectedBatch.summary.batchId} • Coolbox ${activeSuhu?.coolboxId || selectedBatch.summary.coolboxId} • ${selectedBatch.summary.origin} → ${selectedBatch.summary.destination}`
+    : '22 Oktober 2026 • 08.00–10.30 WITA';
+
+  const lastTempLabel =
+    activeSuhu?.latestAirTemp != null
+      ? `Terakhir ${activeSuhu.latestAirTemp.toFixed(1).replace('.', ',')} °C`
+      : selectedBatch
+      ? `Terakhir ${selectedBatch.summary.lastTemp.toFixed(1).replace('.', ',')} °C`
+      : 'Terakhir 1,8 °C';
+
   return (
     <div className="space-y-6">
       {/* Title & Sync Status Header */}
@@ -171,7 +219,9 @@ export const MonitoringPage: React.FC = () => {
           <div className="inline-flex items-center gap-1.5 text-[11px] text-teal-700 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-200/60 font-medium">
             <RefreshCw className={`h-3 w-3 text-teal-600 ${isSyncing ? 'animate-spin' : ''}`} />
             <span>
-              {isLive ? `Realtime Database Live (${batches.length} batch)` : 'Tersinkron demonstrasi'} &bull; 22 Okt 2026, 10.42 WITA
+              {isLive
+                ? `Realtime Database Live (${batches.length} batch • ${Object.keys(suhuMap).length} coolbox aktif)`
+                : 'Tersinkron demonstrasi'}
             </span>
           </div>
         </div>
@@ -192,23 +242,25 @@ export const MonitoringPage: React.FC = () => {
             batches={filteredBatches}
             selectedId={selectedBatch?.summary.id ?? null}
             onSelect={(id) => setSelectedId(id)}
+            suhuMap={suhuMap}
           />
         </div>
       </div>
 
-      {/* Temperature Timeline for Selected Batch */}
+      {/* Temperature Timeline for Selected Batch with Live IoT Telemetry */}
       <div className="w-full">
         <TemperatureChartCard
           dataPoints={temperatureSeries}
           title="Grafik suhu perjalanan"
-          subtitle={
-            selectedBatch
-              ? `${selectedBatch.summary.batchId} • ${selectedBatch.summary.origin} → ${selectedBatch.summary.destination} • ${selectedBatch.summary.dateStr}`
-              : '22 Oktober 2026 • 08.00–10.30 WITA'
-          }
-          lastTempLabel={`Terakhir ${selectedBatch ? selectedBatch.summary.lastTemp.toFixed(1).replace('.', ',') : '1,8'} °C`}
-          syncLabel={selectedBatch?.summary.syncTime ? `Tersinkron ${selectedBatch.summary.syncTime}` : 'Tersinkron 10.42 WITA'}
-          note="Area arsiran: rentang operasional contoh 0–4 °C. Sensor suhu digital IoT DS18B20."
+          subtitle={chartSubtitle}
+          lastTempLabel={lastTempLabel}
+          coolboxId={activeSuhu?.coolboxId || selectedBatch?.summary.coolboxId}
+          averageTemp={activeSuhu?.averageTemp}
+          latestAirTemp={activeSuhu?.latestAirTemp}
+          humidityPct={activeSuhu?.humidityPct}
+          isLive={Boolean(activeSuhu && activeSuhu.dataPoints.length > 0)}
+          syncLabel={activeSuhu?.lastTimestampStr ? `Tersinkron ${activeSuhu.lastTimestampStr}` : undefined}
+          note="Batas suhu aman ikan segar: 0–4 °C. Sensor digital IoT DS18B20 terkalibrasi."
         />
       </div>
 
@@ -266,10 +318,11 @@ export const MonitoringPage: React.FC = () => {
               onChange={(e) => setRiskFilter(e.target.value)}
               className={SELECT_CLASS}
             >
-              <option value="Semua tingkat">Risiko: Semua tingkat</option>
-              <option value="Rendah">Rendah (Skor &lt;40)</option>
-              <option value="Perhatian">Perhatian (Skor 40-59)</option>
-              <option value="Tinggi">Tinggi (Skor &ge;60)</option>
+              <option value="Semua tingkat">Tingkat Mutu: Semua tingkat</option>
+              <option value="Sangat Baik">Sangat Baik (Skor ≥90)</option>
+              <option value="Baik">Baik (Skor 75–89)</option>
+              <option value="Waspada">Waspada (Skor 60–74)</option>
+              <option value="Risiko Tinggi">Risiko Tinggi (Skor &lt;60)</option>
             </select>
             <ChevronDown className="pointer-events-none absolute right-3 top-3 h-3.5 w-3.5 text-slate-400" />
           </div>
@@ -292,7 +345,7 @@ export const MonitoringPage: React.FC = () => {
         )}
       </div>
 
-      {/* Bottom Table: Daftar Perjalanan */}
+      {/* Bottom Table: Daftar Perjalanan with RTDB /suhu & selection link */}
       <RecentDispatchesTable
         title={`Daftar perjalanan (${activeInTransitCount} aktif • ${delayedCount} dengan data tertunda)`}
         showViewAll={false}
@@ -304,8 +357,9 @@ export const MonitoringPage: React.FC = () => {
         endIndex={endIndex}
         onPageChange={(p) => setPage(p)}
         onSelectBatch={(item) => setSelectedId(item.id)}
+        selectedBatchId={selectedBatch?.summary.batchId}
+        suhuMap={suhuMap}
       />
     </div>
   );
 };
-

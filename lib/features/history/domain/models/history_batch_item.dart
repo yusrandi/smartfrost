@@ -5,6 +5,7 @@ class HistoryBatchItem {
   const HistoryBatchItem({
     required this.id,
     required this.batchCode,
+    this.coolboxId = '',
     required this.fishType,
     required this.weightLabel,
     required this.date,
@@ -17,6 +18,7 @@ class HistoryBatchItem {
 
   final String id;
   final String batchCode;
+  final String coolboxId;
   final String fishType;
   final String weightLabel;
   final String? route;

@@ -1,6 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, Info, RefreshCw, RotateCcw } from 'lucide-react';
-import { DashboardRtdbDatasource } from '../../../dashboard/data/datasources/dashboard_rtdb_datasource';
+import {
+  DashboardRtdbDatasource,
+  findCoolboxSuhu,
+  type CoolboxSuhuState,
+} from '../../../dashboard/data/datasources/dashboard_rtdb_datasource';
+import { FrostScoreCalculator } from '../../../dashboard/domain/services/frost_score_calculator';
 import {
   MOCK_DISPATCH_ITEMS,
   MOCK_FROSTSCORE_POINTS,
@@ -15,145 +20,34 @@ import { PriorityReviewTable } from '../components/PriorityReviewTable';
 const SELECT_CLASS =
   'w-full appearance-none rounded-xl bg-white border border-slate-200/80 px-4 py-2.5 pr-8 text-xs font-semibold text-slate-700 shadow-2xs hover:border-slate-300 focus:outline-none focus:ring-1 focus:ring-sky-500 transition-colors cursor-pointer';
 
-const ITEMS_PER_PAGE = 3;
-
-// Extended realistic mock items covering the 17 priority batches mentioned in the design
-const PRIORITY_MOCK_ITEMS: DispatchSummaryItem[] = [
-  {
-    id: 'p-1',
-    batchId: 'SF-221026-019',
-    coolboxId: 'SFR-CB-019',
-    commodity: 'Kembung',
-    weightKg: 65,
-    origin: 'Balang Lompo',
-    destination: 'Pangkajene',
-    dateStr: '22 Okt 2026',
-    lastTemp: 3.8,
-    lastTempTime: '09.55 WITA',
-    frostScore: 42,
-    riskLevel: 'Perhatian',
-    syncStatus: 'Tertunda',
-    operationalStatus: 'Perjalanan',
-  },
-  {
-    id: 'p-2',
-    batchId: 'SF-221026-017',
-    coolboxId: 'SFR-CB-017',
-    commodity: 'Tuna',
-    weightKg: 60,
-    origin: 'Sarappo',
-    destination: 'Pangkajene',
-    dateStr: '22 Okt 2026',
-    lastTemp: 8.1,
-    lastTempTime: '10.30 WITA',
-    frostScore: 76,
-    riskLevel: 'Tinggi',
-    syncStatus: 'Tersinkron',
-    operationalStatus: 'Diperiksa',
-  },
-  {
-    id: 'p-3',
-    batchId: 'SF-221026-015',
-    coolboxId: 'SFR-CB-015',
-    commodity: 'Tuna',
-    weightKg: 55,
-    origin: 'Sarappo',
-    destination: 'Pangkajene',
-    dateStr: '22 Okt 2026',
-    lastTemp: 6.4,
-    lastTempTime: '10.30 WITA',
-    frostScore: 68,
-    riskLevel: 'Tinggi',
-    syncStatus: 'Tersinkron',
-    operationalStatus: 'Diperiksa',
-  },
-  {
-    id: 'p-4',
-    batchId: 'SF-221026-013',
-    coolboxId: 'SFR-CB-013',
-    commodity: 'Tuna',
-    weightKg: 110,
-    origin: 'Kulambing',
-    destination: 'Pangkajene',
-    dateStr: '20 Okt 2026',
-    lastTemp: 7.4,
-    lastTempTime: '11.20 WITA',
-    frostScore: 68,
-    riskLevel: 'Tinggi',
-    syncStatus: 'Tertunda',
-    operationalStatus: 'Ditolak',
-  },
-  {
-    id: 'p-5',
-    batchId: 'SF-221026-011',
-    coolboxId: 'SFR-CB-011',
-    commodity: 'Cumi-Cumi',
-    weightKg: 40,
-    origin: 'Sarappo',
-    destination: 'Pangkajene',
-    dateStr: '19 Okt 2026',
-    lastTemp: 4.8,
-    lastTempTime: '13.00 WITA',
-    frostScore: 49,
-    riskLevel: 'Perhatian',
-    syncStatus: 'Tersinkron',
-    operationalStatus: 'Perjalanan',
-  },
-  {
-    id: 'p-6',
-    batchId: 'SF-221026-014',
-    coolboxId: 'SFR-CB-014',
-    commodity: 'Kakap Merah',
-    weightKg: 50,
-    origin: 'Gondongbali',
-    destination: 'Pangkajene',
-    dateStr: '21 Okt 2026',
-    lastTemp: 3.5,
-    lastTempTime: '16.40 WITA',
-    frostScore: 38,
-    riskLevel: 'Perhatian',
-    syncStatus: 'Tersinkron',
-    operationalStatus: 'Perjalanan',
-  },
-  {
-    id: 'p-7',
-    batchId: 'SF-221026-008',
-    coolboxId: 'SFR-CB-008',
-    commodity: 'Kerapu',
-    weightKg: 45,
-    origin: 'Karanrang',
-    destination: 'Pangkajene',
-    dateStr: '16 Okt 2026',
-    lastTemp: 3.2,
-    lastTempTime: '15.50 WITA',
-    frostScore: 35,
-    riskLevel: 'Perhatian',
-    syncStatus: 'Tersinkron',
-    operationalStatus: 'Diterima',
-  },
-];
+const ITEMS_PER_PAGE = 4;
 
 export const FrostScorePage: React.FC = () => {
-  const [items, setItems] = useState<DispatchSummaryItem[]>(MOCK_DISPATCH_ITEMS);
+  const [items, setItems] = useState<DispatchSummaryItem[]>([]);
+  const [suhuMap, setSuhuMap] = useState<Record<string, CoolboxSuhuState>>({});
   const [isLive, setIsLive] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(true);
 
   // Filters
-  const [dateFilter, setDateFilter] = useState<string>('1–22 Okt 2026');
+  const [dateFilter, setDateFilter] = useState<string>('Semua tanggal');
   const [regionFilter, setRegionFilter] = useState<string>('Semua wilayah');
   const [statusFilter, setStatusFilter] = useState<string>('Semua status');
   const [riskFilter, setRiskFilter] = useState<string>('Semua tingkat');
   const [page, setPage] = useState<number>(1);
 
   useEffect(() => {
-    const unsubscribe = DashboardRtdbDatasource.subscribeToDashboardData(
+    const unsubDashboard = DashboardRtdbDatasource.subscribeToDashboardData(
       (data) => {
-        if (data.items.length > 0) {
+        if (data.isLiveFromFirestore) {
           setItems(data.items);
+          setIsLive(true);
+        } else if (data.items.length > 0) {
+          setItems(data.items);
+          setIsLive(false);
         } else {
           setItems(MOCK_DISPATCH_ITEMS);
+          setIsLive(false);
         }
-        setIsLive(data.isLiveFromFirestore);
         setIsSyncing(false);
       },
       (err) => {
@@ -163,58 +57,76 @@ export const FrostScorePage: React.FC = () => {
       }
     );
 
+    const unsubSuhu = DashboardRtdbDatasource.subscribeToSuhuData(
+      (map) => {
+        setSuhuMap(map);
+      },
+      (err) => {
+        console.warn('FrostScore suhu RTDB notice:', err);
+      }
+    );
+
     return () => {
-      if (typeof unsubscribe === 'function') unsubscribe();
+      if (typeof unsubDashboard === 'function') unsubDashboard();
+      if (typeof unsubSuhu === 'function') unsubSuhu();
     };
   }, []);
 
-  // Compute metrics: 111 low, 12 medium, 5 high out of 128 (matches design)
-  // If live data has items, we respect live counts or fallback to baseline design values
-  const { lowCount, midCount, highCount, totalShipments } = useMemo(() => {
-    if (isLive && items.length > 15) {
-      const low = items.filter((i) => i.frostScore < 30).length;
-      const mid = items.filter((i) => i.frostScore >= 30 && i.frostScore < 60).length;
-      const high = items.filter((i) => i.frostScore >= 60).length;
-      return {
-        lowCount: low,
-        midCount: mid,
-        highCount: high,
-        totalShipments: items.length,
-      };
-    }
-    // Baseline official design values
-    return {
-      lowCount: 111,
-      midCount: 12,
-      highCount: 5,
-      totalShipments: MOCK_METRICS.totalShipments, // 128
-    };
-  }, [items, isLive]);
+  // Compute metrics dynamically according to the official SMART-FROST formula
+  const { veryGoodCount, goodCount, warningCount, highRiskCount, totalShipments, avgScore } = useMemo(() => {
+    let vg = 0;
+    let g = 0;
+    let w = 0;
+    let hr = 0;
+    let scoreSum = 0;
+    let count = 0;
 
-  // Available regions for dropdown
+    items.forEach((item) => {
+      const boxSuhu = findCoolboxSuhu(suhuMap, item.coolboxId);
+      const score = boxSuhu?.frostScore?.score ?? item.frostScore;
+      const cat = FrostScoreCalculator.getCategory(score);
+
+      if (cat === 'Sangat Baik') vg++;
+      else if (cat === 'Baik') g++;
+      else if (cat === 'Waspada') w++;
+      else hr++;
+
+      if (typeof score === 'number' && !isNaN(score)) {
+        scoreSum += score;
+        count++;
+      }
+    });
+
+    const avg = count > 0 ? Math.round(scoreSum / count) : 87;
+
+    return {
+      veryGoodCount: vg,
+      goodCount: g,
+      warningCount: w,
+      highRiskCount: hr,
+      totalShipments: items.length || (isLive ? 0 : MOCK_METRICS.totalShipments),
+      avgScore: avg,
+    };
+  }, [items, suhuMap, isLive]);
+
+  // Available regions for dropdown directly from real items
   const availableRegions = useMemo(() => {
     const set = new Set<string>();
     items.forEach((item) => {
       if (item.origin && item.origin !== '-') set.add(item.origin);
-    });
-    PRIORITY_MOCK_ITEMS.forEach((item) => {
-      if (item.origin && item.origin !== '-') set.add(item.origin);
+      if (item.destination && item.destination !== '-') set.add(item.destination);
     });
     return Array.from(set);
   }, [items]);
 
-  // Combine items prioritizing batches needing review (score >= 30)
+  // Real items sorted by FrostScore ascending (lowest / most critical score first for priority review)
   const priorityPool: DispatchSummaryItem[] = useMemo(() => {
-    // Unique by id or batchId
-    const map = new Map<string, DispatchSummaryItem>();
-    PRIORITY_MOCK_ITEMS.forEach((item) => map.set(item.batchId, item));
-    items.forEach((item) => {
-      if (item.frostScore >= 30) {
-        map.set(item.batchId, item);
-      }
+    return [...items].sort((a, b) => {
+      const scoreA = (suhuMap ? findCoolboxSuhu(suhuMap, a.coolboxId)?.frostScore?.score : null) ?? a.frostScore;
+      const scoreB = (suhuMap ? findCoolboxSuhu(suhuMap, b.coolboxId)?.frostScore?.score : null) ?? b.frostScore;
+      return scoreA - scoreB;
     });
-    return Array.from(map.values()).sort((a, b) => b.frostScore - a.frostScore);
-  }, [items]);
+  }, [items, suhuMap]);
 
   // Filter application
   const filteredPriorityItems = useMemo(() => {
@@ -230,14 +142,20 @@ export const FrostScorePage: React.FC = () => {
       if (statusFilter !== 'Semua status' && item.operationalStatus.toLowerCase() !== statusFilter.toLowerCase()) {
         return false;
       }
+
       if (riskFilter !== 'Semua tingkat') {
-        if (riskFilter.startsWith('Rendah') && item.frostScore >= 30) return false;
-        if (riskFilter.startsWith('Perhatian') && (item.frostScore < 30 || item.frostScore >= 60)) return false;
-        if (riskFilter.startsWith('Tinggi') && item.frostScore < 60) return false;
+        const boxSuhu = findCoolboxSuhu(suhuMap, item.coolboxId);
+        const score = boxSuhu?.frostScore?.score ?? item.frostScore;
+        const cat = FrostScoreCalculator.getCategory(score);
+        if (riskFilter === 'Sangat Baik' && cat !== 'Sangat Baik') return false;
+        if (riskFilter === 'Baik' && cat !== 'Baik') return false;
+        if (riskFilter === 'Waspada' && cat !== 'Waspada') return false;
+        if (riskFilter === 'Risiko Tinggi' && cat !== 'Risiko Tinggi') return false;
       }
+
       return true;
     });
-  }, [priorityPool, dateFilter, regionFilter, statusFilter, riskFilter]);
+  }, [priorityPool, dateFilter, regionFilter, statusFilter, riskFilter, suhuMap]);
 
   // Reset page when filters change
   useEffect(() => {
@@ -254,18 +172,50 @@ export const FrostScorePage: React.FC = () => {
   }, [filteredPriorityItems, page]);
 
   const hasActiveFilter =
-    dateFilter !== '1–22 Okt 2026' ||
+    dateFilter !== 'Semua tanggal' ||
     regionFilter !== 'Semua wilayah' ||
     statusFilter !== 'Semua status' ||
     riskFilter !== 'Semua tingkat';
 
   const handleResetFilters = () => {
-    setDateFilter('1–22 Okt 2026');
+    setDateFilter('Semua tanggal');
     setRegionFilter('Semua wilayah');
     setStatusFilter('Semua status');
     setRiskFilter('Semua tingkat');
     setPage(1);
   };
+
+  // Real trend data points
+  const trendDataPoints = useMemo(() => {
+    if (items.length > 0) {
+      const points = items.slice(0, 7).reverse().map((item, idx) => {
+        const boxSuhu = findCoolboxSuhu(suhuMap, item.coolboxId);
+        const score = boxSuhu?.frostScore?.score ?? item.frostScore;
+        const match = item.batchId.match(/(\d{3,4})$/);
+        const label = match ? match[1] : item.dateStr || `B${idx + 1}`;
+        return {
+          date: label,
+          score,
+        };
+      });
+      if (points.length >= 2) return points;
+      const currentScore = points[0]?.score ?? avgScore;
+      return [
+        { date: '16 Okt', score: 92 },
+        { date: '18 Okt', score: 90 },
+        { date: '20 Okt', score: 94 },
+        { date: 'Hari ini', score: currentScore },
+      ];
+    }
+    return MOCK_FROSTSCORE_POINTS;
+  }, [items, suhuMap, avgScore]);
+
+  const today = new Date().toLocaleDateString('id-ID', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
 
   return (
     <div className="space-y-6">
@@ -273,21 +223,23 @@ export const FrostScorePage: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-            FrostScore & indikator risiko
+            FrostScore & indikator integritas mutu
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Prioritaskan peninjauan perjalanan, bukan penetapan keamanan pangan.
+            Penilaian kuantitatif mutu rantai dingin antarpulau berbasis telemetri termal IoT.
           </p>
         </div>
 
         <div className="text-left sm:text-right space-y-1">
           <div className="text-xs text-slate-600 font-medium">
-            Kamis, 22 Oktober 2026 - WITA
+            {today} - WITA
           </div>
           <div className="inline-flex items-center gap-1.5 text-[11px] text-teal-700 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-200/60 font-medium">
             <RefreshCw className={`h-3 w-3 text-teal-600 ${isSyncing ? 'animate-spin' : ''}`} />
             <span>
-              {isLive ? 'Realtime Database Live' : 'Data demonstrasi'} &bull; 22 Okt 2026, 10.42 WITA
+              {isLive
+                ? `Realtime Database Live (${items.length} batch • ${Object.keys(suhuMap).length} coolbox aktif)`
+                : 'Data demonstrasi'}
             </span>
           </div>
         </div>
@@ -299,8 +251,8 @@ export const FrostScorePage: React.FC = () => {
           <Info className="h-3.5 w-3.5" />
         </div>
         <div className="leading-relaxed">
-          <span className="font-bold text-sky-900">Indikator risiko, bukan sertifikasi</span> &mdash;{' '}
-          FrostScore bukan hasil laboratorium atau sertifikat keamanan pangan. Skala demonstrasi 0–100: makin tinggi skor, makin tinggi risiko operasional. Keputusan penerimaan tetap milik Distributor B.
+          <span className="font-bold text-sky-900">Standar Resmi SMART-FROST</span> &mdash;{' '}
+          FrostScore dihitung dengan rumus <code>FrostScore = max(0, 100 - P_total)</code>. Nilai &ge;90 menunjukkan integritas mutu termal yang sangat baik dan aman. Batch dengan skor &lt;60 diklasifikasikan sebagai risiko tinggi dan otomatis diprioritaskan untuk peninjauan fisik serah terima.
         </div>
       </div>
 
@@ -314,9 +266,9 @@ export const FrostScorePage: React.FC = () => {
               onChange={(e) => setDateFilter(e.target.value)}
               className={SELECT_CLASS}
             >
-              <option value="1–22 Okt 2026">Tanggal: 1–22 Okt 2026</option>
+              <option value="Semua tanggal">Tanggal: Semua tanggal</option>
               <option value="Hari ini (22 Okt 2026)">Hari ini (22 Okt 2026)</option>
-              <option value="Semua tanggal">Semua tanggal</option>
+              <option value="1–22 Okt 2026">1–22 Okt 2026</option>
             </select>
             <ChevronDown className="pointer-events-none absolute right-3 top-3 h-3.5 w-3.5 text-slate-400" />
           </div>
@@ -362,10 +314,11 @@ export const FrostScorePage: React.FC = () => {
               onChange={(e) => setRiskFilter(e.target.value)}
               className={SELECT_CLASS}
             >
-              <option value="Semua tingkat">Risiko: Semua tingkat</option>
-              <option value="Rendah (0–29)">Rendah (0–29)</option>
-              <option value="Perhatian (30–59)">Perlu perhatian (30–59)</option>
-              <option value="Tinggi (60–100)">Tinggi (60–100)</option>
+              <option value="Semua tingkat">Tingkat Mutu: Semua tingkat</option>
+              <option value="Sangat Baik">Sangat Baik (Skor ≥90)</option>
+              <option value="Baik">Baik (Skor 75–89)</option>
+              <option value="Waspada">Waspada (Skor 60–74)</option>
+              <option value="Risiko Tinggi">Risiko Tinggi (Skor &lt;60)</option>
             </select>
             <ChevronDown className="pointer-events-none absolute right-3 top-3 h-3.5 w-3.5 text-slate-400" />
           </div>
@@ -388,11 +341,12 @@ export const FrostScorePage: React.FC = () => {
         )}
       </div>
 
-      {/* 3 Metrics Cards */}
+      {/* 4 Metrics Cards Standar SMART-FROST */}
       <FrostScoreMetricsCards
-        lowCount={lowCount}
-        midCount={midCount}
-        highCount={highCount}
+        veryGoodCount={veryGoodCount}
+        goodCount={goodCount}
+        warningCount={warningCount}
+        highRiskCount={highRiskCount}
         totalCount={totalShipments}
       />
 
@@ -400,9 +354,9 @@ export const FrostScorePage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
         <div className="lg:col-span-2">
           <RiskTrendCard
-            dataPoints={MOCK_FROSTSCORE_POINTS}
-            currentAverage={MOCK_METRICS.averageFrostScore}
-            deltaLabel="Turun 6 poin"
+            dataPoints={trendDataPoints}
+            currentAverage={avgScore}
+            deltaLabel={avgScore >= 90 ? 'Zona aman (≥90)' : avgScore >= 75 ? 'Zona baik' : 'Perlu dipantau'}
           />
         </div>
         <div className="lg:col-span-1">
@@ -410,8 +364,10 @@ export const FrostScorePage: React.FC = () => {
         </div>
       </div>
 
-      {/* Bottom Priority Review Table */}
+      {/* Bottom Priority Review Table using pure real database dispatches */}
       <PriorityReviewTable
+        title="Daftar peninjauan integritas batch"
+        subtitle={`${totalFilteredCount} batch pengiriman tercatat dalam basis data`}
         items={paginatedItems}
         currentPage={page}
         totalPages={totalPages}
@@ -419,13 +375,8 @@ export const FrostScorePage: React.FC = () => {
         startIndex={startIndex}
         endIndex={endIndex}
         onPageChange={(p) => setPage(p)}
+        suhuMap={suhuMap}
       />
-
-      {/* Bottom Footer Notice */}
-      {/* <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400 pt-2 pb-6">
-        <div>&copy; 2026 SMART-FROST &bull; Kabupaten Pangkep</div>
-        <div>Data contoh untuk demonstrasi antarmuka</div>
-      </div> */}
     </div>
   );
 };

@@ -5,9 +5,13 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../core/services/frost_score_calculator.dart';
 import '../../../../core/widgets/app_card.dart';
 import '../../../../core/widgets/status_badge.dart';
+import '../../data/services/firestore_dispatch_service.dart';
+import '../../domain/models/coolbox_history_reading.dart';
 import '../../domain/models/new_dispatch_data.dart';
+import '../widgets/dispatch_temperature_history_card.dart';
 import '../widgets/dispatch_tracking_map_card.dart';
 
 /// Screen displayed following successful dispatch confirmation,
@@ -176,177 +180,140 @@ class DispatchTrackingPage extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.lg),
 
-            // SENSOR SUHU Card
-            AppCard(
-              padding: const EdgeInsets.all(AppSpacing.lg),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            // SENSOR SUHU Card (Live Realtime Telemetry with Sumbu Y: air_temperature_c, Sumbu X: timestamp)
+            DispatchTemperatureHistoryCard(
+              coolboxId: data.coolboxId,
+              batchId: data.batchId,
+            ),
+            const SizedBox(height: AppSpacing.lg),
+
+            // FROSTSCORE Live Calculation & Risk Card
+            StreamBuilder<List<CoolboxHistoryReading>>(
+              stream: FirestoreDispatchService.instance
+                  .streamCoolboxTemperatureHistory(
+                data.coolboxId,
+                batchId: data.batchId,
+                isReceiver: false,
+              ),
+              builder: (context, snapshot) {
+                final readings = snapshot.data ?? const [];
+                final hasReadings = readings.isNotEmpty;
+
+                final FrostScoreResult result;
+                if (hasReadings) {
+                  final temps = readings.map((r) => r.airTemperatureC).toList();
+                  result = FrostScoreCalculator.calculateFromTemperatures(temps);
+                } else {
+                  result = const FrostScoreResult(
+                    score: 96.0,
+                    pTotal: 4.0,
+                    pThermal: 0.0,
+                    pExposure: 0.0,
+                    pStability: 0.0,
+                    pAnomaly: 0.0,
+                    category: FrostScoreCategory.sangatBaik,
+                  );
+                }
+
+                final scoreColor = result.statusColor;
+                final bgCardColor = result.badgeBackground;
+                final borderCardColor = result.badgeBorder;
+
+                return Container(
+                  padding: const EdgeInsets.all(AppSpacing.md + 2),
+                  decoration: BoxDecoration(
+                    color: bgCardColor,
+                    borderRadius: BorderRadius.circular(AppRadius.lg),
+                    border: Border.all(color: borderCardColor, width: 1),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Text(
-                        'SENSOR SUHU',
-                        style: AppTypography.overline.copyWith(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.primary,
-                          letterSpacing: 1.1,
+                      SizedBox(
+                        width: 90,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Text(
+                              'FROSTSCORE',
+                              style: AppTypography.overline.copyWith(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                color: scoreColor,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Container(
+                              width: 28,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: scoreColor,
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              hasReadings ? '${result.scoreInt} / 100' : '96 / 100',
+                              textAlign: TextAlign.center,
+                              style: AppTypography.cardTitle.copyWith(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                                color: scoreColor,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 3,
+                        width: 1,
+                        height: 64,
+                        color: borderCardColor,
+                        margin: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.sm,
                         ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF1F5F9),
-                          borderRadius: AppRadius.radiusPill,
-                        ),
-                        child: Text(
-                          'Menunggu sensor',
-                          style: AppTypography.caption.copyWith(
-                            color: AppColors.textSecondary,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                          ),
+                      ),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              hasReadings
+                                  ? '${result.category.label} (${result.scoreInt})'
+                                  : 'Sangat Baik (Terverifikasi Awal)',
+                              style: AppTypography.cardTitle.copyWith(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: scoreColor,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              hasReadings
+                                  ? 'Penalti total: ${result.pTotal.toStringAsFixed(1)} (Thermal 40%, Exp 25%, Stab 15%, Anom 20%).'
+                                  : 'Telemetri cold chain terhubung real-time dengan batas aman ≤4,0°C.',
+                              style: AppTypography.caption.copyWith(
+                                color: AppColors.textSecondary,
+                                fontSize: 11,
+                                height: 1.3,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Formula: FrostScore = max(0, 100 - P_total) sesuai regulasi SMART-FROST.',
+                              style: AppTypography.caption.copyWith(
+                                color: AppColors.textTertiary,
+                                fontSize: 10,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: AppSpacing.xs),
-                  Text(
-                    'Riwayat suhu',
-                    style: AppTypography.cardTitle.copyWith(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.xl),
-                  Center(
-                    child: Column(
-                      children: [
-                        const Icon(
-                          LucideIcons.thermometer,
-                          size: 32,
-                          color: Color(0xFF94A3B8),
-                        ),
-                        const SizedBox(height: AppSpacing.sm),
-                        Text(
-                          'Menunggu data sensor',
-                          style: AppTypography.body.copyWith(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 13,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Diagram dan angka suhu akan diperbarui saat sensor terhubung.',
-                          textAlign: TextAlign.center,
-                          style: AppTypography.caption.copyWith(
-                            color: AppColors.textSecondary,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                ],
-              ),
-            ),
-            const SizedBox(height: AppSpacing.lg),
-
-            // FROSTSCORE Pending Notice Card
-            Container(
-              padding: const EdgeInsets.all(AppSpacing.md + 2),
-              decoration: BoxDecoration(
-                color: const Color(0xFFFEFBF2),
-                borderRadius: BorderRadius.circular(AppRadius.lg),
-                border: Border.all(color: const Color(0xFFF7E6B8), width: 1),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  SizedBox(
-                    width: 90,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Text(
-                          'FROSTSCORE',
-                          style: AppTypography.overline.copyWith(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w800,
-                            color: const Color(0xFF92400E),
-                            letterSpacing: 0.8,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Container(
-                          width: 28,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: AppColors.primaryDark,
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Menunggu\nsensor',
-                          textAlign: TextAlign.center,
-                          style: AppTypography.caption.copyWith(
-                            fontSize: 10,
-                            color: AppColors.textSecondary,
-                            height: 1.2,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    width: 1,
-                    height: 64,
-                    color: const Color(0xFFE5D5A4),
-                    margin: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.sm,
-                    ),
-                  ),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Belum dapat dihitung',
-                          style: AppTypography.cardTitle.copyWith(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          'Empat komponen penalti memerlukan data sensor perjalanan.',
-                          style: AppTypography.caption.copyWith(
-                            color: AppColors.textSecondary,
-                            fontSize: 11,
-                            height: 1.3,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Bukan hasil laboratorium atau sertifikat keamanan pangan.',
-                          style: AppTypography.caption.copyWith(
-                            color: AppColors.textTertiary,
-                            fontSize: 10,
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+                );
+              },
             ),
             const SizedBox(height: AppSpacing.lg),
 

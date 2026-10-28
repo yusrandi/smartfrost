@@ -4,9 +4,10 @@ import type { DashboardMetrics } from '../../data/models/dashboard_types';
 
 interface MetricCardsGridProps {
   metrics: DashboardMetrics;
+  realAverageTemp?: number | null;
 }
 
-export const MetricCardsGrid: React.FC<MetricCardsGridProps> = ({ metrics }) => {
+export const MetricCardsGrid: React.FC<MetricCardsGridProps> = ({ metrics, realAverageTemp }) => {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
       {/* Card 1: Total Pengiriman (Dark navy card) */}
@@ -49,7 +50,7 @@ export const MetricCardsGrid: React.FC<MetricCardsGridProps> = ({ metrics }) => 
         </div>
       </div>
 
-      {/* Card 3: FrostScore rata-rata */}
+      {/* Card 3: FrostScore rata-rata (Opsi B: Rata-rata seluruh pengiriman dengan suhu sensor valid dari /suhu) */}
       <div className="rounded-2xl bg-white border border-slate-200/80 p-5 shadow-2xs flex flex-col justify-between">
         <div className="flex items-center justify-between">
           <span className="text-xs font-semibold text-slate-500">
@@ -65,7 +66,16 @@ export const MetricCardsGrid: React.FC<MetricCardsGridProps> = ({ metrics }) => 
           </div>
         </div>
         <div className="text-[11.5px] text-slate-500">
-          Indikator risiko • lebih rendah lebih baik
+          {realAverageTemp != null ? (
+            <div className="flex items-center justify-between gap-1 flex-wrap">
+              <span>Semua pengiriman</span>
+              <span className="font-semibold text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200/60 font-mono text-[10.5px]">
+                Suhu: {realAverageTemp.toFixed(1)} °C
+              </span>
+            </div>
+          ) : (
+            'Indikator risiko • seluruh pengiriman aktif'
+          )}
         </div>
       </div>
 
@@ -85,7 +95,7 @@ export const MetricCardsGrid: React.FC<MetricCardsGridProps> = ({ metrics }) => 
           </div>
         </div>
         <div className="text-[11.5px] text-slate-500">
-          Skor ≥60 • perlu ditinjau
+          Skor &lt;60 &bull; perlu penanganan
         </div>
       </div>
     </div>

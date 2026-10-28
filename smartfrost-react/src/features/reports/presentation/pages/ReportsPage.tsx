@@ -1,6 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Download, RefreshCw } from 'lucide-react';
-import { DashboardRtdbDatasource } from '../../../dashboard/data/datasources/dashboard_rtdb_datasource';
+import {
+  DashboardRtdbDatasource,
+  type CoolboxSuhuState,
+} from '../../../dashboard/data/datasources/dashboard_rtdb_datasource';
 import { MOCK_DISPATCH_ITEMS } from '../../../dashboard/data/mock/dashboard_mock_data';
 import type { DispatchSummaryItem } from '../../../dashboard/data/models/dashboard_types';
 import { ReportPreviewCard } from '../components/ReportPreviewCard';
@@ -9,12 +12,13 @@ import { ExportReportModal } from '../components/ExportReportModal';
 
 export const ReportsPage: React.FC = () => {
   const [items, setItems] = useState<DispatchSummaryItem[]>(MOCK_DISPATCH_ITEMS);
+  const [suhuMap, setSuhuMap] = useState<Record<string, CoolboxSuhuState>>({});
   const [isLive, setIsLive] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(true);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
 
   useEffect(() => {
-    const unsubscribe = DashboardRtdbDatasource.subscribeToDashboardData(
+    const unsubDashboard = DashboardRtdbDatasource.subscribeToDashboardData(
       (data) => {
         if (data.items.length > 0) {
           setItems(data.items);
@@ -31,8 +35,14 @@ export const ReportsPage: React.FC = () => {
       }
     );
 
+    const unsubSuhu = DashboardRtdbDatasource.subscribeToSuhuData(
+      (map) => setSuhuMap(map),
+      (err) => console.warn('Reports /suhu subscription notice:', err)
+    );
+
     return () => {
-      if (typeof unsubscribe === 'function') unsubscribe();
+      if (typeof unsubDashboard === 'function') unsubDashboard();
+      if (typeof unsubSuhu === 'function') unsubSuhu();
     };
   }, []);
 
@@ -44,6 +54,23 @@ export const ReportsPage: React.FC = () => {
     return Array.from(set);
   }, [items]);
 
+  const liveDateStr = useMemo(() => {
+    const now = new Date();
+    const dayNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+    const monthNames = [
+      'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
+    ];
+    return `${dayNames[now.getDay()]}, ${now.getDate()} ${monthNames[now.getMonth()]} ${now.getFullYear()} - WITA`;
+  }, []);
+
+  const liveTimeStr = useMemo(() => {
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, '0');
+    const mm = String(now.getMinutes()).padStart(2, '0');
+    return `${now.getDate()} Okt ${now.getFullYear()}, ${hh}.${mm} WITA`;
+  }, []);
+
   return (
     <div className="space-y-6">
       {/* Title & Synchronization Header */}
@@ -53,25 +80,25 @@ export const ReportsPage: React.FC = () => {
             Laporan distribusi
           </h1>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Susun ringkasan pemantauan dengan sumber dan kelengkapan data yang transparan.
+            Susun ringkasan pemantauan dengan sumber dan kelengkapan data rantai dingin yang transparan.
           </p>
         </div>
 
         <div className="text-left sm:text-right space-y-1">
           <div className="text-xs text-slate-600 font-medium">
-            Kamis, 22 Oktober 2026 - WITA
+            {liveDateStr}
           </div>
           <div className="inline-flex items-center gap-1.5 text-[11px] text-teal-700 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-200/60 font-medium">
             <RefreshCw className={`h-3 w-3 text-teal-600 ${isSyncing ? 'animate-spin' : ''}`} />
             <span>
-              {isLive ? `Realtime Database Live (${items.length} batch)` : 'Data demonstrasi'} &bull; 22 Okt 2026, 10.42 WITA
+              {isLive ? `Realtime Database Live (${items.length} batch)` : 'Data demonstrasi'} &bull; {liveTimeStr}
             </span>
           </div>
         </div>
       </div>
 
       {/* Main Report Document Preview Card */}
-      <ReportPreviewCard items={items} isLive={isLive} />
+      <ReportPreviewCard items={items} isLive={isLive} suhuMap={suhuMap} />
 
       {/* Primary Export Action (Only One Export Button) */}
       <div className="flex items-center justify-end">
@@ -81,12 +108,12 @@ export const ReportsPage: React.FC = () => {
           className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 py-3 px-8 rounded-2xl bg-[#0284C7] hover:bg-sky-700 text-white font-extrabold text-sm shadow-sm hover:shadow-md transition-all cursor-pointer"
         >
           <Download className="h-4 w-4" />
-          <span>Export</span>
+          <span>Export Laporan</span>
         </button>
       </div>
 
       {/* Saved Reports Section */}
-      <SavedReportsCard />
+      <SavedReportsCard items={items} suhuMap={suhuMap} />
 
       {/* Export Configuration Modal (Opens Dialog on Click) */}
       <ExportReportModal
@@ -94,12 +121,13 @@ export const ReportsPage: React.FC = () => {
         onClose={() => setIsModalOpen(false)}
         items={items}
         availableRegions={availableRegions}
+        suhuMap={suhuMap}
       />
 
       {/* Bottom Footer Notice */}
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400 pt-2 pb-6">
         <div>&copy; 2026 SMART-FROST &bull; Kabupaten Pangkep</div>
-        <div>Data contoh untuk demonstrasi antarmuka</div>
+        <div>Sistem Audit Mutu & Keamanan Distribusi Perikanan Rantai Dingin</div>
       </div>
     </div>
   );

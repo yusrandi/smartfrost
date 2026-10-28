@@ -43,6 +43,7 @@ class DispatchView extends StatelessWidget {
         DispatchHeroCard(
           title: summary.frostScoreAverageLabel,
           statusText: summary.frostScoreStatusText,
+          scoreText: summary.scoreText,
         ),
         const SizedBox(height: AppSpacing.lg),
 

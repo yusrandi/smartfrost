@@ -1,5 +1,10 @@
 import React, { useState } from 'react';
 import { Calendar, ChevronDown, Download, FileSpreadsheet, FileText, Info, X } from 'lucide-react';
+import {
+  findCoolboxSuhu,
+  type CoolboxSuhuState,
+} from '../../../dashboard/data/datasources/dashboard_rtdb_datasource';
+import { FrostScoreCalculator } from '../../../dashboard/domain/services/frost_score_calculator';
 import type { DispatchSummaryItem } from '../../../dashboard/data/models/dashboard_types';
 
 interface ExportReportModalProps {
@@ -7,6 +12,7 @@ interface ExportReportModalProps {
   onClose: () => void;
   items: DispatchSummaryItem[];
   availableRegions: string[];
+  suhuMap?: Record<string, CoolboxSuhuState>;
 }
 
 const SELECT_CLASS =
@@ -17,8 +23,9 @@ export const ExportReportModal: React.FC<ExportReportModalProps> = ({
   onClose,
   items,
   availableRegions,
+  suhuMap,
 }) => {
-  const [period, setPeriod] = useState<string>('1–22 Oktober 2026');
+  const [period, setPeriod] = useState<string>('Bulan Berjalan (Oktober 2026)');
   const [region, setRegion] = useState<string>('Semua wilayah');
   const [status, setStatus] = useState<string>('Semua status');
   const [risk, setRisk] = useState<string>('Semua tingkat');
@@ -31,46 +38,73 @@ export const ExportReportModal: React.FC<ExportReportModalProps> = ({
   const handleExport = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // 1. Apply filters
-    let filtered = [...items];
+    // 1. Resolve real telemetry and official FrostScore calculation for each item
+    const resolvedItems = items.map((it) => {
+      const boxSuhu = suhuMap ? findCoolboxSuhu(suhuMap, it.coolboxId) : null;
+      const effectiveTemp = boxSuhu?.latestAirTemp != null ? boxSuhu.latestAirTemp : it.lastTemp;
+      const effectiveScore = boxSuhu?.frostScore?.score != null ? boxSuhu.frostScore.score : it.frostScore;
+      const effectiveCategory = boxSuhu?.frostScore?.status ?? FrostScoreCalculator.getCategory(effectiveScore);
+
+      return {
+        ...it,
+        effectiveTemp,
+        effectiveScore,
+        effectiveCategory,
+      };
+    });
+
+    // 2. Apply filters
+    let filtered = [...resolvedItems];
 
     if (region !== 'Semua wilayah') {
       filtered = filtered.filter(
-        (it) => it.origin.toLowerCase().includes(region.toLowerCase()) || region.toLowerCase().includes(it.origin.toLowerCase())
+        (it) =>
+          it.origin.toLowerCase().includes(region.toLowerCase()) ||
+          region.toLowerCase().includes(it.origin.toLowerCase())
       );
     }
 
     if (status !== 'Semua status') {
-      filtered = filtered.filter((it) => it.operationalStatus.toLowerCase() === status.toLowerCase());
+      filtered = filtered.filter(
+        (it) => it.operationalStatus.toLowerCase() === status.toLowerCase()
+      );
     }
 
     if (risk !== 'Semua tingkat') {
-      filtered = filtered.filter((it) => it.riskLevel.toLowerCase() === risk.toLowerCase());
+      if (risk === 'Sangat Baik') {
+        filtered = filtered.filter((it) => it.effectiveScore >= 90);
+      } else if (risk === 'Baik') {
+        filtered = filtered.filter((it) => it.effectiveScore >= 75 && it.effectiveScore < 90);
+      } else if (risk === 'Waspada') {
+        filtered = filtered.filter((it) => it.effectiveScore >= 60 && it.effectiveScore < 75);
+      } else if (risk === 'Risiko Tinggi') {
+        filtered = filtered.filter((it) => it.effectiveScore < 60);
+      }
     }
 
     if (!includeDelayed) {
       filtered = filtered.filter((it) => it.syncStatus !== 'Tertunda');
     }
 
-    // 2. Prepare headers & rows
+    // 3. Prepare headers & rows
     const headers = [
       'ID Batch',
       'Coolbox ID',
       'Komoditas',
       'Berat (kg)',
-      'Asal (Distributor)',
-      'Tujuan',
-      'Tanggal',
-      'Suhu Terakhir (°C)',
-      'Waktu Suhu',
+      'Asal Pengirim',
+      'Tujuan Penerima',
+      'Tanggal Pengiriman',
+      'Suhu Udara (°C)',
+      'Waktu Telemetri',
       'FrostScore',
-      'Tingkat Risiko',
-      'Status Sinkronisasi',
+      'Klasifikasi Risiko',
+      'Status Sensor IoT',
       'Status Operasional',
     ];
 
     if (includeAnomalies) {
-      headers.push('Status Anomali Suhu');
+      headers.push('Status Kepatuhan Suhu (≤4°C)');
     }
 
     const rows = filtered.map((item) => {
@@ -82,15 +116,15 @@ export const ExportReportModal: React.FC<ExportReportModalProps> = ({
         item.origin,
         item.destination,
         item.dateStr,
-        item.lastTemp,
+        item.effectiveTemp.toFixed(1),
         item.lastTempTime,
-        item.frostScore,
-        item.riskLevel,
+        item.effectiveScore,
+        item.effectiveCategory,
         item.syncStatus,
         item.operationalStatus,
       ];
       if (includeAnomalies) {
-        row.push(item.lastTemp > 4 ? 'Anomali (>4°C)' : 'Normal');
+        row.push(item.effectiveTemp > 4.0 ? 'Anomali (>4,0°C)' : 'Aman (≤4,0°C)');
       }
       return row;
     });
@@ -98,7 +132,7 @@ export const ExportReportModal: React.FC<ExportReportModalProps> = ({
     const timestamp = new Date().toISOString().slice(0, 10);
     const filename = `smartfrost-laporan-${timestamp}`;
 
-    // 3. Export based on selected format
+    // 4. Export based on selected format
     if (format === 'excel') {
       // Excel XML / Spreadsheet
       const tableHtml = `
@@ -109,7 +143,7 @@ export const ExportReportModal: React.FC<ExportReportModalProps> = ({
             <x:ExcelWorkbook>
               <x:ExcelWorksheets>
                 <x:ExcelWorksheet>
-                  <x:Name>Laporan Distribusi</x:Name>
+                  <x:Name>Laporan Rantai Dingin</x:Name>
                   <x:WorksheetOptions>
                     <x:DisplayGridlines/>
                   </x:WorksheetOptions>
@@ -125,8 +159,8 @@ export const ExportReportModal: React.FC<ExportReportModalProps> = ({
           </style>
         </head>
         <body>
-          <h2 style="font-family: sans-serif; color: #0f172a; margin-bottom: 4px;">SMART-FROST &bull; Laporan Pemantauan Rantai Dingin</h2>
-          <p style="font-family: sans-serif; color: #64748b; font-size: 12px; margin-top: 0;">Periode: ${period} | Wilayah: ${region} | Diekspor: ${new Date().toLocaleString('id-ID')}</p>
+          <h2 style="font-family: sans-serif; color: #0f172a; margin-bottom: 4px;">SMART-FROST &bull; Laporan Audit Pemantauan Rantai Dingin</h2>
+          <p style="font-family: sans-serif; color: #64748b; font-size: 12px; margin-top: 0;">Periode: ${period} | Asal Pengirim: ${region} | Diekspor: ${new Date().toLocaleString('id-ID')} | Standar Suhu: 0–4°C</p>
           <table>
             <thead>
               <tr>
@@ -198,7 +232,7 @@ export const ExportReportModal: React.FC<ExportReportModalProps> = ({
         <div className="border-b border-slate-100 pb-3">
           <h3 className="text-base font-bold text-slate-900">Filter & Ekspor Laporan</h3>
           <p className="text-xs text-slate-500 mt-0.5">
-            Pilih parameter filter dan format file (Excel atau CSV) sebelum mengekspor data.
+            Pilih parameter filter dan format file (Excel atau CSV) sebelum mengunduh rekap pemantauan.
           </p>
         </div>
 
@@ -220,10 +254,10 @@ export const ExportReportModal: React.FC<ExportReportModalProps> = ({
             </div>
           </div>
 
-          {/* 2. Wilayah */}
+          {/* 2. Wilayah Asal Pengirim */}
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">
-              Wilayah
+              Wilayah asal pengirim
             </label>
             <div className="relative">
               <select
@@ -231,7 +265,7 @@ export const ExportReportModal: React.FC<ExportReportModalProps> = ({
                 onChange={(e) => setRegion(e.target.value)}
                 className={SELECT_CLASS}
               >
-                <option value="Semua wilayah">Semua wilayah</option>
+                <option value="Semua wilayah">Semua wilayah pengirim</option>
                 {availableRegions.map((r) => (
                   <option key={r} value={r}>
                     {r}
@@ -264,10 +298,10 @@ export const ExportReportModal: React.FC<ExportReportModalProps> = ({
             </div>
           </div>
 
-          {/* 4. Tingkat Risiko */}
+          {/* 4. Tingkat Risiko (Official FrostScore Tiers) */}
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">
-              Tingkat risiko
+              Klasifikasi FrostScore
             </label>
             <div className="relative">
               <select
@@ -275,10 +309,11 @@ export const ExportReportModal: React.FC<ExportReportModalProps> = ({
                 onChange={(e) => setRisk(e.target.value)}
                 className={SELECT_CLASS}
               >
-                <option value="Semua tingkat">Semua tingkat</option>
-                <option value="Rendah">Rendah (0–29)</option>
-                <option value="Perhatian">Perlu perhatian (30–59)</option>
-                <option value="Tinggi">Tinggi (60–100)</option>
+                <option value="Semua tingkat">Semua klasifikasi</option>
+                <option value="Sangat Baik">Sangat Baik (≥90)</option>
+                <option value="Baik">Baik (75–89)</option>
+                <option value="Waspada">Waspada (60–74)</option>
+                <option value="Risiko Tinggi">Risiko Tinggi (&lt;60)</option>
               </select>
               <ChevronDown className="pointer-events-none absolute right-3 top-3 h-3.5 w-3.5 text-slate-400" />
             </div>
@@ -287,7 +322,7 @@ export const ExportReportModal: React.FC<ExportReportModalProps> = ({
           {/* 5. Format Export: Excel atau CSV */}
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1.5">
-              Format ekspor
+              Format ekspor berkas
             </label>
             <div className="grid grid-cols-2 gap-2.5">
               <button
@@ -308,7 +343,7 @@ export const ExportReportModal: React.FC<ExportReportModalProps> = ({
                 </div>
                 <div>
                   <div className="text-xs font-bold">Excel (.xls)</div>
-                  <div className="text-[10px] text-slate-500">Tabel & spreadsheet</div>
+                  <div className="text-[10px] text-slate-500">Spreadsheet rapi</div>
                 </div>
               </button>
 
@@ -330,7 +365,7 @@ export const ExportReportModal: React.FC<ExportReportModalProps> = ({
                 </div>
                 <div>
                   <div className="text-xs font-bold">CSV (.csv)</div>
-                  <div className="text-[10px] text-slate-500">Data mentah tabular</div>
+                  <div className="text-[10px] text-slate-500">Data mentah UTF-8</div>
                 </div>
               </button>
             </div>
@@ -345,7 +380,7 @@ export const ExportReportModal: React.FC<ExportReportModalProps> = ({
                 onChange={(e) => setIncludeAnomalies(e.target.checked)}
                 className="h-3.5 w-3.5 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
               />
-              <span>Sertakan kolom status anomali suhu</span>
+              <span>Sertakan kolom audit anomali suhu (&gt;4,0°C)</span>
             </label>
 
             <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer">
@@ -363,7 +398,7 @@ export const ExportReportModal: React.FC<ExportReportModalProps> = ({
           <div className="rounded-xl bg-sky-50 border border-sky-100 p-3 text-[11px] text-sky-900 flex items-start gap-2">
             <Info className="h-4 w-4 text-sky-600 shrink-0 mt-0.5" />
             <div className="leading-snug">
-              <strong className="text-sky-950">Laporan tidak mengubah database.</strong> Berkas akan diekspor sesuai filter yang Anda pilih di atas.
+              <strong className="text-sky-950">Integritas data terjamin.</strong> Berkas ekspor menggunakan data telemetri sensor real-time yang langsung dihitung dengan formula FrostScore resmi.
             </div>
           </div>
 

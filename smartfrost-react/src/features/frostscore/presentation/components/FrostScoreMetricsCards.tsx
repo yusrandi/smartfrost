@@ -1,83 +1,104 @@
 import React from 'react';
-import { Gauge, AlertTriangle, ShieldAlert } from 'lucide-react';
+import { ShieldCheck, CheckCircle2, AlertTriangle, ShieldAlert } from 'lucide-react';
 
 interface FrostScoreMetricsCardsProps {
-  lowCount: number;
-  midCount: number;
-  highCount: number;
+  veryGoodCount: number;
+  goodCount: number;
+  warningCount: number;
+  highRiskCount: number;
   totalCount: number;
 }
 
 export const FrostScoreMetricsCards: React.FC<FrostScoreMetricsCardsProps> = ({
-  lowCount,
-  midCount,
-  highCount,
+  veryGoodCount,
+  goodCount,
+  warningCount,
+  highRiskCount,
   totalCount,
 }) => {
   const safeTotal = Math.max(totalCount, 1);
-  const lowPct = ((lowCount / safeTotal) * 100).toFixed(1).replace('.', ',');
-  const midPct = ((midCount / safeTotal) * 100).toFixed(1).replace('.', ',');
-  const highPct = ((highCount / safeTotal) * 100).toFixed(1).replace('.', ',');
+  const veryGoodPct = ((veryGoodCount / safeTotal) * 100).toFixed(1).replace('.', ',');
+  const goodPct = ((goodCount / safeTotal) * 100).toFixed(1).replace('.', ',');
+  const warningPct = ((warningCount / safeTotal) * 100).toFixed(1).replace('.', ',');
+  const highRiskPct = ((highRiskCount / safeTotal) * 100).toFixed(1).replace('.', ',');
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      {/* 1. Risiko Rendah (0-29) */}
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* 1. Sangat Baik (90–100) */}
       <div className="rounded-2xl bg-white border border-slate-200/80 p-5 shadow-2xs hover:border-slate-300 transition-all">
         <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
-          <span>Risiko rendah &bull; 0–29</span>
-          <div className="h-7 w-7 rounded-full bg-slate-50 text-slate-500 flex items-center justify-center">
-            <Gauge className="h-4 w-4 text-slate-500" />
+          <span>Sangat baik &bull; &ge;90</span>
+          <div className="h-7 w-7 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <ShieldCheck className="h-4 w-4" />
           </div>
         </div>
 
         <div className="mt-3">
           <div className="text-3xl font-black text-slate-900 tracking-tight">
-            {lowCount} batch
+            {veryGoodCount} <span className="text-lg font-bold text-slate-500">batch</span>
           </div>
           <div className="text-xs text-slate-400 mt-1 font-medium">
-            {lowPct}% dari {totalCount} batch
+            {veryGoodPct}% dari {totalCount} batch
           </div>
         </div>
       </div>
 
-      {/* 2. Perlu Perhatian (30-59) */}
+      {/* 2. Baik (75–89) */}
       <div className="rounded-2xl bg-white border border-slate-200/80 p-5 shadow-2xs hover:border-slate-300 transition-all">
         <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
-          <span>Perlu perhatian &bull; 30–59</span>
+          <span>Baik &bull; 75–89</span>
+          <div className="h-7 w-7 rounded-full bg-lime-50 text-lime-600 flex items-center justify-center">
+            <CheckCircle2 className="h-4 w-4" />
+          </div>
+        </div>
+
+        <div className="mt-3">
+          <div className="text-3xl font-black text-slate-900 tracking-tight">
+            {goodCount} <span className="text-lg font-bold text-slate-500">batch</span>
+          </div>
+          <div className="text-xs text-slate-400 mt-1 font-medium">
+            {goodPct}% dari {totalCount} batch
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Waspada (60–74) */}
+      <div className="rounded-2xl bg-white border border-slate-200/80 p-5 shadow-2xs hover:border-slate-300 transition-all">
+        <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
+          <span>Waspada &bull; 60–74</span>
           <div className="h-7 w-7 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center">
-            <AlertTriangle className="h-4 w-4 text-amber-500" />
+            <AlertTriangle className="h-4 w-4" />
           </div>
         </div>
 
         <div className="mt-3">
           <div className="text-3xl font-black text-slate-900 tracking-tight">
-            {midCount} batch
+            {warningCount} <span className="text-lg font-bold text-slate-500">batch</span>
           </div>
           <div className="text-xs text-slate-400 mt-1 font-medium">
-            {midPct}% dari {totalCount} batch
+            {warningPct}% dari {totalCount} batch
           </div>
         </div>
       </div>
 
-      {/* 3. Risiko Tinggi (60-100) */}
+      {/* 4. Risiko Tinggi (<60) */}
       <div className="rounded-2xl bg-white border border-slate-200/80 p-5 shadow-2xs hover:border-slate-300 transition-all">
         <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
-          <span>Risiko tinggi &bull; 60–100</span>
+          <span>Risiko tinggi &bull; &lt;60</span>
           <div className="h-7 w-7 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center">
-            <ShieldAlert className="h-4 w-4 text-rose-500" />
+            <ShieldAlert className="h-4 w-4" />
           </div>
         </div>
 
         <div className="mt-3">
           <div className="text-3xl font-black text-slate-900 tracking-tight">
-            {highCount} batch
+            {highRiskCount} <span className="text-lg font-bold text-slate-500">batch</span>
           </div>
           <div className="text-xs text-slate-400 mt-1 font-medium">
-            {highPct}% dari {totalCount} batch
+            {highRiskPct}% dari {totalCount} batch
           </div>
         </div>
       </div>
     </div>
   );
 };
-

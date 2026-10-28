@@ -9,6 +9,7 @@ import '../../../dispatch/data/services/firestore_dispatch_service.dart';
 import '../../../dispatch/domain/models/new_dispatch_data.dart';
 import '../../../dispatch/presentation/pages/dispatch_tracking_page.dart';
 import '../../../profile/domain/models/user_profile.dart';
+import '../../../receiving/presentation/pages/receiving_detail_page.dart';
 import '../../data/mock/mock_history_data.dart';
 import '../../domain/models/history_batch_item.dart';
 import '../../domain/models/history_filter.dart';
@@ -91,11 +92,48 @@ class _HistoryPageState extends State<HistoryPage> {
     }).toList();
   }
 
-  void _openTrackingDetail(HistoryBatchItem item, UserProfile? user) {
+  void _openTrackingDetail(
+    HistoryBatchItem item,
+    UserProfile? user, {
+    required bool isDispatch,
+  }) {
+    if (!isDispatch) {
+      final origin = item.route != null && item.route!.contains('→')
+          ? item.route!.split('→').first.trim()
+          : (item.supplier ?? '-');
+      final dest = item.route != null && item.route!.contains('→')
+          ? item.route!.split('→').last.trim()
+          : (user?.storeLocation.isNotEmpty == true ? user!.storeLocation : '-');
+
+      double weightVal = 50.0;
+      final parsed = double.tryParse(item.weightLabel.replaceAll(RegExp(r'[^0-9.]'), ''));
+      if (parsed != null && parsed > 0) weightVal = parsed;
+
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ReceivingDetailPage(
+            batchId: item.batchCode,
+            coolboxId: item.coolboxId.isNotEmpty ? item.coolboxId : 'SFR-CB-01',
+            fishType: item.fishType,
+            weightKg: weightVal,
+            supplierName: item.supplier ?? '-',
+            originLocation: origin,
+            destinationLocation: dest,
+            temperature: -2.4,
+            frostScore: 90,
+            initialStatus: item.statusLabel,
+            formattedDate: item.date,
+            receiverName: user?.name,
+            receiverLocation: user?.storeLocation,
+          ),
+        ),
+      );
+      return;
+    }
+
     final dispatchData = NewDispatchData(
       batchId: item.batchCode,
-      coolboxId:
-          'CB-${item.batchCode.replaceAll(RegExp(r'[^0-9]'), '').padLeft(4, '0')}',
+      coolboxId: item.coolboxId.isNotEmpty ? item.coolboxId : 'SFR-CB-01',
       senderName: item.supplier ?? user?.name ?? '-',
       fishType: item.fishType,
       weightRange: item.weightLabel,
@@ -203,7 +241,11 @@ class _HistoryPageState extends State<HistoryPage> {
                     for (final item in items) ...[
                       HistoryBatchCard(
                         item: item,
-                        onTap: () => _openTrackingDetail(item, activeUser),
+                        onTap: () => _openTrackingDetail(
+                          item,
+                          activeUser,
+                          isDispatch: isDispatch,
+                        ),
                       ),
                       const SizedBox(height: AppSpacing.md),
                     ],

@@ -7,9 +7,11 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/main_shell_layout.dart';
 import '../../../../core/widgets/segmented_tab_bar.dart';
 import '../../../../core/widgets/smart_qr_scanner_sheet.dart';
+import '../../../../core/services/frost_score_calculator.dart';
 import '../../../auth/domain/services/auth_session.dart';
 import '../../../dispatch/data/mock/mock_dispatch_data.dart';
 import '../../../dispatch/data/services/firestore_dispatch_service.dart';
+import '../../../dispatch/domain/models/coolbox_temperature_data.dart';
 import '../../../dispatch/domain/models/dispatch_item.dart';
 import '../../../dispatch/domain/models/dispatch_summary.dart';
 import '../../../dispatch/domain/models/new_dispatch_data.dart';
@@ -79,8 +81,7 @@ class _HomePageState extends State<HomePage> {
     final user = AuthSession.instance.currentUser;
     final dispatchData = NewDispatchData(
       batchId: item.batchCode,
-      coolboxId:
-          'CB-${item.batchCode.replaceAll(RegExp(r'[^0-9]'), '').padLeft(4, '0')}',
+      coolboxId: item.coolboxId.isNotEmpty ? item.coolboxId : 'SFR-CB-01',
       senderName: user?.name ?? '-',
       fishType: item.fishType,
       weightRange: '${item.weightKg.toStringAsFixed(0)} kg',
@@ -179,7 +180,11 @@ class _HomePageState extends State<HomePage> {
             dispatchData['destinationLocation'] as String? ??
             (user?.storeLocation ?? 'Pulau Karanrang');
         final temp = (dispatchData['temperature'] as num?)?.toDouble() ?? -2.4;
-        final frostScore = (dispatchData['frostScore'] as num?)?.toInt() ?? 96;
+        final rawScore = (dispatchData['frostScore'] as num?)?.toInt();
+        final frostScore = rawScore ??
+            (temp > FrostScoreCalculator.safeTempLimit
+                ? FrostScoreCalculator.calculateSingleSnapshot(temp).scoreInt
+                : 96);
         final status = dispatchData['status'] as String? ?? 'Dalam Perjalanan';
 
         String formattedDate = 'Hari ini';
@@ -316,14 +321,20 @@ class _HomePageState extends State<HomePage> {
           dispatchData['destinationLocation'] as String? ??
           (user?.storeLocation ?? 'Pulau Karanrang');
       final temp = (dispatchData['temperature'] as num?)?.toDouble() ?? -2.4;
-      final frostScore = (dispatchData['frostScore'] as num?)?.toInt() ?? 96;
+      final rawScore = (dispatchData['frostScore'] as num?)?.toInt();
+      final frostScore = rawScore ??
+          (temp > FrostScoreCalculator.safeTempLimit
+              ? FrostScoreCalculator.calculateSingleSnapshot(temp).scoreInt
+              : 96);
       final status = dispatchData['status'] as String? ?? item.status.label;
 
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => ReceivingDetailPage(
             batchId: batchId,
-            coolboxId: coolboxId.isNotEmpty ? coolboxId : batchId,
+            coolboxId: coolboxId.isNotEmpty
+                ? coolboxId
+                : (item.coolboxId.isNotEmpty ? item.coolboxId : 'SFR-CB-01'),
             fishType: fishType,
             weightKg: weightVal,
             supplierName: senderName,
@@ -345,7 +356,7 @@ class _HomePageState extends State<HomePage> {
             batchId: item.batchCode,
             coolboxId: item.coolboxId.isNotEmpty
                 ? item.coolboxId
-                : item.batchCode,
+                : 'SFR-CB-01',
             fishType: item.fishType,
             weightKg: item.weightKg,
             supplierName: item.supplierName,
@@ -476,27 +487,56 @@ class _HomePageState extends State<HomePage> {
                                               .rejectedCount
                                         : 0);
 
-                              final summary = DispatchSummary(
-                                distributorName:
-                                    user?.organization ?? 'DISTRIBUTOR A',
-                                greetingTitle: _getGreetingTitle(),
-                                greetingSubtitle: _getGreetingSubtitle(),
-                                frostScoreAverageLabel: 'FrostScore rata-rata',
-                                frostScoreStatusText: realItems.isNotEmpty
-                                    ? '${realItems.length} batch tercatat di cloud'
-                                    : 'Belum ada pengiriman aktif',
-                                totalShipments: totalCount,
-                                inTransitCount: inTransitCount,
-                                completedCount: completedCount,
-                                rejectedCount: rejectedCount,
-                              );
+                              return StreamBuilder<CoolboxTemperatureData?>(
+                                stream: FirestoreDispatchService.instance
+                                    .streamSenderCoolboxTemperature(user: user),
+                                builder: (context, tempSnapshot) {
+                                  final tempData = tempSnapshot.data;
+                                  final avgTemp = tempData?.averageTemperatureC ?? tempData?.airTemperatureC;
+                                  final coolboxId = tempData?.coolboxId ?? '';
 
-                              return DispatchView(
-                                summary: summary,
-                                recentShipments: itemsToDisplay,
-                                onCreateShipmentPressed: _openNewDispatch,
-                                onViewAllPressed: () => _handleNavSelected(1),
-                                onItemPressed: _openDispatchDetail,
+                                  final String scoreText;
+                                  final String statusText;
+
+                                  if (avgTemp != null) {
+                                    final fs = tempData?.frostScore ??
+                                        FrostScoreCalculator.calculateSingleSnapshot(avgTemp).scoreInt;
+                                    final category = FrostScoreCalculator.getCategory(fs);
+                                    scoreText = '$fs';
+                                    statusText = coolboxId.isNotEmpty
+                                        ? 'Coolbox $coolboxId • Suhu ${avgTemp.toStringAsFixed(1)}°C (${category.label})'
+                                        : 'Suhu ${avgTemp.toStringAsFixed(1)}°C (${category.label})';
+                                  } else {
+                                    scoreText = 'N/A';
+                                    statusText = realItems.isNotEmpty
+                                        ? '${realItems.length} batch tercatat di cloud'
+                                        : 'Belum ada pengiriman aktif';
+                                  }
+
+                                  final summary = DispatchSummary(
+                                    distributorName:
+                                        user?.organization ?? 'DISTRIBUTOR A',
+                                    greetingTitle: _getGreetingTitle(),
+                                    greetingSubtitle: _getGreetingSubtitle(),
+                                    frostScoreAverageLabel:
+                                        'FrostScore rata-rata',
+                                    frostScoreStatusText: statusText,
+                                    scoreText: scoreText,
+                                    totalShipments: totalCount,
+                                    inTransitCount: inTransitCount,
+                                    completedCount: completedCount,
+                                    rejectedCount: rejectedCount,
+                                  );
+
+                                  return DispatchView(
+                                    summary: summary,
+                                    recentShipments: itemsToDisplay,
+                                    onCreateShipmentPressed: _openNewDispatch,
+                                    onViewAllPressed: () =>
+                                        _handleNavSelected(1),
+                                    onItemPressed: _openDispatchDetail,
+                                  );
+                                },
                               );
                             },
                           )

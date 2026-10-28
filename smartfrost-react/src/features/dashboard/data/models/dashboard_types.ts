@@ -4,13 +4,14 @@ export interface DispatchSummaryItem {
   coolboxId: string;
   commodity: string;
   weightKg: number;
+  weightDisplay?: string;
   origin: string;
   destination: string;
   dateStr: string;
   lastTemp: number;
   lastTempTime: string;
   frostScore: number;
-  riskLevel: 'Rendah' | 'Perhatian' | 'Tinggi';
+  riskLevel: 'Sangat Baik' | 'Baik' | 'Waspada' | 'Risiko Tinggi' | 'Rendah' | 'Perhatian' | 'Tinggi';
   syncStatus: 'Tersinkron' | 'Tertunda';
   syncTime?: string;
   operationalStatus: 'Menunggu' | 'Perjalanan' | 'Diperiksa' | 'Diterima' | 'Ditolak';

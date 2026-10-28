@@ -103,12 +103,18 @@ class DispatchHeroCard extends StatelessWidget {
                   color: Color(0xFF67CDE6),
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  scoreText,
-                  style: AppTypography.badge.copyWith(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      scoreText,
+                      style: AppTypography.badge.copyWith(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                   ),
                 ),
               ],

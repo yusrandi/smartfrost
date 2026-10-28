@@ -1,11 +1,14 @@
 import React from 'react';
-import { ArrowRight, Thermometer, ShieldCheck, MapPin } from 'lucide-react';
+import { ArrowRight, Thermometer, MapPin } from 'lucide-react';
 import type { MonitoringBatch } from '../../data/models/monitoring_types';
+import { findCoolboxSuhu, type CoolboxSuhuState } from '../../../dashboard/data/datasources/dashboard_rtdb_datasource';
+import { FrostScoreCalculator } from '../../../dashboard/domain/services/frost_score_calculator';
 
 interface TripListPanelProps {
   batches: MonitoringBatch[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  suhuMap?: Record<string, CoolboxSuhuState>;
 }
 
 const STATUS_CONFIG: Record<
@@ -49,7 +52,7 @@ const STATUS_CONFIG: Record<
   },
 };
 
-export const TripListPanel: React.FC<TripListPanelProps> = ({ batches, selectedId, onSelect }) => {
+export const TripListPanel: React.FC<TripListPanelProps> = ({ batches, selectedId, onSelect, suhuMap }) => {
   return (
     <div className="rounded-2xl bg-white border border-slate-200/80 p-5 shadow-2xs h-full flex flex-col justify-between">
       <div>
@@ -58,7 +61,7 @@ export const TripListPanel: React.FC<TripListPanelProps> = ({ batches, selectedI
           <div>
             <h3 className="text-base font-bold text-slate-900">Daftar perjalanan</h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Klik perjalanan untuk menyorot rute & trackline di peta
+              Klik perjalanan untuk menyorot rute & telemetri sensor
             </p>
           </div>
           <span className="text-xs font-bold text-sky-700 bg-sky-50 px-2.5 py-0.5 rounded-full border border-sky-200/60">
@@ -84,6 +87,12 @@ export const TripListPanel: React.FC<TripListPanelProps> = ({ batches, selectedI
                 dot: 'bg-slate-400',
               };
 
+              const boxSuhu = suhuMap ? findCoolboxSuhu(suhuMap, item.coolboxId) : null;
+              const realTemp = boxSuhu?.latestAirTemp;
+              const score = boxSuhu?.frostScore?.score ?? item.frostScore;
+              const category = FrostScoreCalculator.getCategory(score);
+              const badgeStyle = FrostScoreCalculator.getBadgeStyle(score);
+
               return (
                 <div
                   key={item.id}
@@ -96,23 +105,26 @@ export const TripListPanel: React.FC<TripListPanelProps> = ({ batches, selectedI
                 >
                   {/* Top line: Batch ID & Status Badge */}
                   <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className={`text-xs font-black transition-colors ${isSelected ? 'text-sky-950' : 'text-slate-900 group-hover:text-sky-700'}`}>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className={`text-xs font-black font-mono transition-colors ${isSelected ? 'text-sky-950' : 'text-slate-900 group-hover:text-sky-700'}`}>
                         {item.batchId}
                       </span>
+                      <span className="text-[10px] text-slate-400 font-mono px-1.5 py-0.5 rounded bg-slate-100">
+                        {boxSuhu?.coolboxId || item.coolboxId}
+                      </span>
                       {isSelected && (
-                        <span className="inline-flex items-center gap-1.5 text-[10px] font-extrabold text-sky-800 bg-white px-2 py-0.5 rounded-full border border-sky-300 shadow-2xs">
-                          <span className="relative flex h-2 w-2">
+                        <span className="inline-flex items-center gap-1 text-[9.5px] font-extrabold text-sky-800 bg-white px-2 py-0.5 rounded-full border border-sky-300 shadow-2xs font-sans">
+                          <span className="relative flex h-1.5 w-1.5">
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-sky-600"></span>
+                            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-sky-600"></span>
                           </span>
-                          Disorot di peta
+                          Disorot
                         </span>
                       )}
                     </div>
 
                     <span
-                      className={`inline-flex items-center gap-1.5 text-[10.5px] font-bold px-2 py-0.5 rounded-full border ${statusCfg.bg} ${statusCfg.text} ${statusCfg.border}`}
+                      className={`inline-flex items-center gap-1.5 text-[10.5px] font-bold px-2 py-0.5 rounded-full border shrink-0 ${statusCfg.bg} ${statusCfg.text} ${statusCfg.border}`}
                     >
                       <span className={`h-1.5 w-1.5 rounded-full ${statusCfg.dot}`} />
                       {statusCfg.label}
@@ -120,7 +132,7 @@ export const TripListPanel: React.FC<TripListPanelProps> = ({ batches, selectedI
                   </div>
 
                   {/* Route: Origin -> Destination */}
-                  <div className="mt-2.5 flex items-center gap-2 text-xs font-bold text-slate-800">
+                  <div className="mt-2 flex items-center gap-2 text-xs font-bold text-slate-800">
                     <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md ${isSelected ? 'bg-emerald-50 text-emerald-900 border border-emerald-200/80' : 'text-slate-700'}`}>
                       <MapPin className="h-3 w-3 text-emerald-600 shrink-0" />
                       {item.origin}
@@ -137,7 +149,7 @@ export const TripListPanel: React.FC<TripListPanelProps> = ({ batches, selectedI
                   {/* Commodity & Meta */}
                   <div className="mt-2 text-[11px] text-slate-500 flex items-center justify-between">
                     <span>
-                      {item.commodity} &bull; {item.weightKg} kg
+                      {item.commodity} &bull; {item.weightDisplay || `${item.weightKg} kg`}
                     </span>
                     <span className="text-slate-400 text-[10.5px]">
                       {item.dateStr.includes('•') ? item.dateStr.split('•')[1]?.trim() : item.dateStr}
@@ -145,17 +157,22 @@ export const TripListPanel: React.FC<TripListPanelProps> = ({ batches, selectedI
                   </div>
 
                   {/* Metrics Pills: Last Temp & FrostScore */}
-                  <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                  <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between gap-2 text-[11px]">
                     <div className="inline-flex items-center gap-1 text-slate-600 font-medium">
-                      <Thermometer className="h-3.5 w-3.5 text-sky-500" />
-                      <span>{item.lastTemp.toFixed(1).replace('.', ',')} °C</span>
+                      <Thermometer className="h-3.5 w-3.5 text-sky-500 shrink-0" />
+                      {realTemp != null ? (
+                        <span className="font-mono font-bold text-slate-900 flex items-center gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          {realTemp.toFixed(1).replace('.', ',')} &deg;C
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 text-[10.5px]">Menunggu sensor</span>
+                      )}
                     </div>
 
-                    <div className="inline-flex items-center gap-1 text-slate-600 font-medium">
-                      <ShieldCheck className="h-3.5 w-3.5 text-teal-600" />
-                      <span>
-                        FrostScore <strong className="text-slate-800">{item.frostScore}</strong>
-                      </span>
+                    <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border shrink-0 ${badgeStyle.badgeClass}`}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${badgeStyle.dotClass}`} />
+                      <span>{score} &bull; {category}</span>
                     </div>
                   </div>
                 </div>
@@ -167,8 +184,8 @@ export const TripListPanel: React.FC<TripListPanelProps> = ({ batches, selectedI
 
       {/* Footer helper */}
       <div className="pt-3 border-t border-slate-100 text-[11px] text-slate-400 flex items-center justify-between">
-        <span>Menampilkan rute logistik antarpulau</span>
-        <span className="font-medium text-sky-600">Klik rute untuk zoom & sorot</span>
+        <span>Rute logistik antarpulau</span>
+        <span className="font-medium text-sky-600">Pilih rute untuk zoom telemetri</span>
       </div>
     </div>
   );

@@ -28,14 +28,15 @@ class DispatchItemCard extends StatelessWidget {
           Row(
             children: [
               const Icon(
-                LucideIcons.box,
+                LucideIcons.clock,
                 size: 18,
                 color: AppColors.textSecondary,
               ),
               const SizedBox(width: AppSpacing.xs + 2),
               Expanded(
-                child: Text(item.batchCode, style: AppTypography.batchCode),
+                child: Text(item.formattedDate, style: AppTypography.batchCode),
               ),
+
               _buildStatusBadge(item.statusLabel),
             ],
           ),
@@ -100,12 +101,12 @@ class DispatchItemCard extends StatelessWidget {
               Row(
                 children: [
                   const Icon(
-                    LucideIcons.clock,
+                    LucideIcons.box,
                     size: 14,
                     color: AppColors.textTertiary,
                   ),
                   const SizedBox(width: AppSpacing.xs),
-                  Text(item.formattedDate, style: AppTypography.caption),
+                  Text(item.batchCode, style: AppTypography.caption),
                 ],
               ),
               if (item.isSynchronized)
@@ -140,10 +141,7 @@ class DispatchItemCard extends StatelessWidget {
     } else if (sLower.contains('selesai') || sLower.contains('diterima')) {
       return StatusBadge.success(label: status);
     } else if (sLower.contains('selesai periksa')) {
-      return StatusBadge(
-        label: status,
-        variant: StatusBadgeVariant.info,
-      );
+      return StatusBadge(label: status, variant: StatusBadgeVariant.info);
     } else {
       return StatusBadge.warning(label: status);
     }

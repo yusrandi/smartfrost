@@ -10,8 +10,8 @@ interface RiskTrendCardProps {
 
 export const RiskTrendCard: React.FC<RiskTrendCardProps> = ({
   dataPoints,
-  currentAverage = 24,
-  deltaLabel = 'Turun 6 poin',
+  currentAverage = 87,
+  deltaLabel = 'Stabil di zona aman',
 }) => {
   const [wrapRef, width] = useElementWidth<HTMLDivElement>();
 
@@ -25,7 +25,7 @@ export const RiskTrendCard: React.FC<RiskTrendCardProps> = ({
   const chartH = height - paddingTop - paddingBottom;
 
   const minScore = 0;
-  const maxScore = 70;
+  const maxScore = 100;
   const scoreRange = maxScore - minScore;
 
   const getY = (score: number) => {
@@ -48,29 +48,74 @@ export const RiskTrendCard: React.FC<RiskTrendCardProps> = ({
       <div>
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
-            <h3 className="text-base font-bold text-slate-900">Tren risiko distribusi</h3>
+            <h3 className="text-base font-bold text-slate-900">Tren integritas mutu rantai dingin</h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Rata-rata FrostScore harian &bull; 16–22 Oktober
+              Rata-rata FrostScore harian &bull; 16–22 Oktober (Skala 0–100)
             </p>
           </div>
-          <span className="text-xs font-semibold text-sky-600 bg-sky-50 px-2.5 py-0.5 rounded-full border border-sky-100">
+          <span className="text-xs font-semibold text-sky-700 bg-sky-50 px-2.5 py-0.5 rounded-full border border-sky-100">
             7 hari terakhir
           </span>
         </div>
 
         {/* Chart Canvas */}
         <div ref={wrapRef} className="relative mt-3 w-full">
-          <div className="text-[10px] text-slate-400 font-medium mb-1">FrostScore rata-rata</div>
+          <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium mb-1">
+            <span>FrostScore rata-rata harian</span>
+            <span className="text-emerald-600 font-semibold">&ge;90 Sangat Baik</span>
+          </div>
           <svg width={width} height={height} className="block w-full select-none">
             <defs>
               <linearGradient id="riskAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#0284C7" stopOpacity="0.16" />
+                <stop offset="0%" stopColor="#0284C7" stopOpacity="0.2" />
                 <stop offset="100%" stopColor="#0284C7" stopOpacity="0" />
               </linearGradient>
             </defs>
 
+            {/* Threshold Line 90 (Batas Aman / Sangat Baik) */}
+            <g>
+              <line
+                x1={paddingLeft}
+                y1={getY(90)}
+                x2={width - paddingRight}
+                y2={getY(90)}
+                stroke="#10B981"
+                strokeWidth="1.2"
+                strokeDasharray="4 4"
+              />
+              <text
+                x={width - paddingRight - 4}
+                y={getY(90) - 4}
+                textAnchor="end"
+                className="text-[9px] fill-emerald-600 font-bold"
+              >
+                Batas Aman (&ge;90)
+              </text>
+            </g>
+
+            {/* Threshold Line 60 (Ambang Kritis / Risiko Tinggi) */}
+            <g>
+              <line
+                x1={paddingLeft}
+                y1={getY(60)}
+                x2={width - paddingRight}
+                y2={getY(60)}
+                stroke="#F43F5E"
+                strokeWidth="1.2"
+                strokeDasharray="3 3"
+              />
+              <text
+                x={width - paddingRight - 4}
+                y={getY(60) - 4}
+                textAnchor="end"
+                className="text-[9px] fill-rose-500 font-semibold"
+              >
+                Ambang Kritis (&lt;60)
+              </text>
+            </g>
+
             {/* Grid Lines & Y Labels */}
-            {[60, 40, 20, 0].map((val) => {
+            {[100, 80, 60, 40, 20, 0].map((val) => {
               const y = getY(val);
               return (
                 <g key={val}>
@@ -98,74 +143,73 @@ export const RiskTrendCard: React.FC<RiskTrendCardProps> = ({
             {/* Area Fill */}
             {areaStr && <polygon points={areaStr} fill="url(#riskAreaGrad)" />}
 
-            {/* Trend Line */}
-            <polyline
-              fill="none"
-              stroke="#0284C7"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              points={pointsStr}
-            />
+            {/* Connecting Line */}
+            {pointsStr && (
+              <polyline
+                fill="none"
+                stroke="#0284C7"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                points={pointsStr}
+              />
+            )}
 
-            {/* Dots */}
+            {/* Data Dots with Official SMART-FROST Colors */}
+            {dataPoints.map((pt, i) => {
+              const cx = getX(i);
+              const cy = getY(pt.score);
+              const dotColor =
+                pt.score >= 90
+                  ? '#059669' // Emerald
+                  : pt.score >= 75
+                  ? '#65A30D' // Lime
+                  : pt.score >= 60
+                  ? '#D97706' // Amber
+                  : '#E11D48'; // Rose
+
+              return (
+                <circle
+                  key={pt.date}
+                  cx={cx}
+                  cy={cy}
+                  r="4"
+                  fill={dotColor}
+                  stroke="#FFFFFF"
+                  strokeWidth="2"
+                  className="transition-transform hover:scale-125"
+                >
+                  <title>{`${pt.date}: ${pt.score}`}</title>
+                </circle>
+              );
+            })}
+
+            {/* X-Axis Date Labels */}
             {dataPoints.map((pt, i) => (
-              <circle
-                key={`${pt.date}-${i}`}
-                cx={getX(i)}
-                cy={getY(pt.score)}
-                r="3.5"
-                className="fill-sky-600 stroke-white stroke-2"
+              <text
+                key={pt.date}
+                x={getX(i)}
+                y={height - 6}
+                textAnchor={i === 0 ? 'start' : i === dataPoints.length - 1 ? 'end' : 'middle'}
+                className="text-[10px] fill-slate-500 font-medium"
               >
-                <title>{`${pt.date} • Skor ${pt.score}`}</title>
-              </circle>
+                {pt.date}
+              </text>
             ))}
-
-            {/* Filtered X Labels (16 Okt, 18 Okt, 20 Okt, 22 Okt) */}
-            {dataPoints
-              .filter((_, i) => i % 2 === 0 || i === dataPoints.length - 1)
-              .map((pt) => {
-                const origIdx = dataPoints.findIndex((d) => d.date === pt.date);
-                return (
-                  <text
-                    key={`x-${pt.date}`}
-                    x={getX(origIdx)}
-                    y={height - 6}
-                    textAnchor="middle"
-                    className="text-[10px] fill-slate-400 font-mono"
-                  >
-                    {pt.date}
-                  </text>
-                );
-              })}
           </svg>
-        </div>
-
-        <div className="text-[11px] text-slate-400 mt-1">
-          Sumber: batch tersinkron &bull; data demonstrasi
         </div>
       </div>
 
-      {/* Highlight & Footer */}
-      <div className="mt-4 pt-3 border-t border-slate-100 flex flex-col gap-2">
-        <div className="flex items-center justify-between">
-          <div className="text-xs text-slate-700">
-            Rata-rata saat ini:{' '}
-            <strong className="text-base font-black text-slate-900">{currentAverage}</strong>{' '}
-            <span className="text-xs text-slate-400 font-normal">/100</span>
-          </div>
-
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700 border border-emerald-200/60">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            <span>{deltaLabel}</span>
-          </div>
+      {/* Footer Info */}
+      <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-100 text-xs text-slate-500">
+        <div>
+          Rata-rata saat ini:{' '}
+          <strong className="text-slate-900 font-mono text-sm">{currentAverage} / 100</strong>
         </div>
-
-        <p className="text-[11px] text-slate-400 leading-snug">
-          FrostScore adalah indikator risiko, bukan hasil laboratorium atau sertifikat keamanan pangan.
-        </p>
+        <div className="font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60 text-[11px]">
+          {deltaLabel}
+        </div>
       </div>
     </div>
   );
 };
-

@@ -97,7 +97,9 @@ class FirestoreMasterDataService {
     if (_rtdbInstance != null) return _rtdbInstance!;
     try {
       final defaultUrl = DefaultFirebaseOptions.currentPlatform.databaseURL;
-      if (defaultUrl != null && defaultUrl.isNotEmpty && Firebase.apps.isNotEmpty) {
+      if (defaultUrl != null &&
+          defaultUrl.isNotEmpty &&
+          Firebase.apps.isNotEmpty) {
         _rtdbInstance = FirebaseDatabase.instanceFor(
           app: Firebase.app(),
           databaseURL: defaultUrl,
@@ -117,7 +119,9 @@ class FirestoreMasterDataService {
 
   static Map<String, dynamic> _toMap(dynamic val) {
     if (val is Map) {
-      return val.map((k, v) => MapEntry(k.toString(), v is Map ? _toMap(v) : v));
+      return val.map(
+        (k, v) => MapEntry(k.toString(), v is Map ? _toMap(v) : v),
+      );
     }
     return <String, dynamic>{};
   }
@@ -128,6 +132,11 @@ class FirestoreMasterDataService {
     'SFR-CB-201',
     'SFR-CB-315',
     'SFR-CB-101',
+    'SFR-CB-001',
+    'SFR-CB-002',
+    'SFR-CB-003',
+    'SFR-CB-004',
+    'SFR-CB-005',
   ];
 
   static const List<String> defaultFishes = [
@@ -419,7 +428,9 @@ class FirestoreMasterDataService {
         } else if (val is List) {
           final list = val
               .where((e) => e != null)
-              .map((e) => e is Map ? (e['code']?.toString() ?? '') : e.toString())
+              .map(
+                (e) => e is Map ? (e['code']?.toString() ?? '') : e.toString(),
+              )
               .where((s) => s.isNotEmpty)
               .toList();
           return list.isNotEmpty ? list : defaultCoolboxes;
@@ -455,7 +466,9 @@ class FirestoreMasterDataService {
         } else if (val is List) {
           final list = val
               .where((e) => e != null)
-              .map((e) => e is Map ? (e['name']?.toString() ?? '') : e.toString())
+              .map(
+                (e) => e is Map ? (e['name']?.toString() ?? '') : e.toString(),
+              )
               .where((s) => s.isNotEmpty)
               .toList();
           return list.isNotEmpty ? list : defaultFishes;
@@ -470,26 +483,38 @@ class FirestoreMasterDataService {
   /// Realtime stream of weight options from RTDB
   Stream<List<String>> streamWeights() {
     try {
-      return _db.ref('master_weights').orderByChild('order').onValue.map((event) {
+      return _db.ref('master_weights').orderByChild('order').onValue.map((
+        event,
+      ) {
         final snap = event.snapshot;
         if (!snap.exists || snap.value == null) return defaultWeights;
         final val = snap.value;
         if (val is Map) {
           final entries = val.entries.toList();
           entries.sort((a, b) {
-            final orderA = (a.value is Map) ? (a.value['order'] as num? ?? 0) : 0;
-            final orderB = (b.value is Map) ? (b.value['order'] as num? ?? 0) : 0;
+            final orderA = (a.value is Map)
+                ? (a.value['order'] as num? ?? 0)
+                : 0;
+            final orderB = (b.value is Map)
+                ? (b.value['order'] as num? ?? 0)
+                : 0;
             return orderA.compareTo(orderB);
           });
           final list = entries
-              .map((e) => (e.value is Map) ? (e.value['range']?.toString() ?? '') : '')
+              .map(
+                (e) => (e.value is Map)
+                    ? (e.value['range']?.toString() ?? '')
+                    : '',
+              )
               .where((w) => w.isNotEmpty)
               .toList();
           return list.isNotEmpty ? list : defaultWeights;
         } else if (val is List) {
           final list = val
               .where((e) => e != null)
-              .map((e) => e is Map ? (e['range']?.toString() ?? '') : e.toString())
+              .map(
+                (e) => e is Map ? (e['range']?.toString() ?? '') : e.toString(),
+              )
               .where((s) => s.isNotEmpty)
               .toList();
           return list.isNotEmpty ? list : defaultWeights;

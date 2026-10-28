@@ -6,6 +6,7 @@ class DispatchSummary {
     required this.greetingSubtitle,
     required this.frostScoreAverageLabel,
     required this.frostScoreStatusText,
+    this.scoreText = 'N/A',
     required this.totalShipments,
     required this.inTransitCount,
     required this.completedCount,
@@ -17,6 +18,7 @@ class DispatchSummary {
   final String greetingSubtitle;
   final String frostScoreAverageLabel;
   final String frostScoreStatusText;
+  final String scoreText;
   final int totalShipments;
   final int inTransitCount;
   final int completedCount;
