@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -278,9 +279,244 @@ class FirestoreMasterDataService {
       if (!distSnap.exists || distSnap.value == null) {
         await seedDistributorAccounts();
       }
+
+      // 5. Seed Suhu Telemetry (Latest & History) if empty
+      final suhuSnap = await _db.ref('suhu/SFR-CB-002/history').get();
+      if (!suhuSnap.exists || suhuSnap.value == null) {
+        await seedSuhuTelemetry(coolboxId: 'SFR-CB-002');
+      }
     } catch (e) {
       debugPrint('RealtimeDB seedMasterData notice (offline or skipped): $e');
     }
+  }
+
+  // ============================================================================
+  // SUHU TELEMETRY SEEDER & SIMULATOR (LATEST & HISTORY)
+  // ============================================================================
+
+  static String _formatHistoryKey(int counter) {
+    final hex = counter.toRadixString(16).padLeft(16, '0');
+    return 'r$hex';
+  }
+
+  Future<int> _getNextCounter(String coolboxId) async {
+    try {
+      final metaSnap = await _db
+          .ref('suhu/$coolboxId/sync_meta/latest_id')
+          .get();
+      if (metaSnap.exists && metaSnap.value is String) {
+        final idStr = metaSnap.value as String;
+        final match = RegExp(r'^r([0-9a-fA-F]+)$').firstMatch(idStr);
+        if (match != null) {
+          final hex = match.group(1)!;
+          return int.parse(hex, radix: 16) + 1;
+        }
+      }
+
+      final histSnap = await _db.ref('suhu/$coolboxId/history').get();
+      if (histSnap.exists && histSnap.value is Map) {
+        final keys = (histSnap.value as Map).keys
+            .map((k) => k.toString())
+            .toList();
+        if (keys.isNotEmpty) {
+          keys.sort();
+          final lastKey = keys.last;
+          final match = RegExp(r'^r([0-9a-fA-F]+)$').firstMatch(lastKey);
+          if (match != null) {
+            final hex = match.group(1)!;
+            return int.parse(hex, radix: 16) + 1;
+          }
+        }
+      }
+    } catch (_) {}
+    return 0x1b1;
+  }
+
+  /// Seeds initial IoT temperature telemetry (`latest`, `history`, `sync_meta`)
+  /// for [coolboxId] (default: 'SFR-CB-002') into Realtime Database.
+  Future<void> seedSuhuTelemetry({
+    String coolboxId = 'SFR-CB-002',
+    bool isColdAndSafe = true,
+    int initialHistoryCount = 10,
+    bool forceClearHistory = false,
+  }) async {
+    try {
+      if (forceClearHistory) {
+        await _db.ref('suhu/$coolboxId/history').remove();
+      }
+
+      int counter = await _getNextCounter(coolboxId);
+      final now = DateTime.now().toUtc();
+      const interval = Duration(minutes: 5);
+      final startTime = now.subtract(interval * (initialHistoryCount - 1));
+
+      final Map<String, dynamic> updates = {};
+      Map<String, dynamic>? lastSample;
+      String? lastKey;
+
+      final rand = math.Random();
+
+      // Rute Maritim Pangkep (Pulau Balang Lompo -> Pelabuhan Maccini Baji)
+      const originLat = -4.9350;
+      const originLng = 119.3620;
+      const destLat = -4.8378;
+      const destLng = 119.5372;
+
+      for (int i = 0; i < initialHistoryCount; i++) {
+        final key = _formatHistoryKey(counter++);
+        final timestamp = startTime.add(interval * i).toIso8601String();
+        final progress = (i / math.max(1, initialHistoryCount - 1)).clamp(
+          0.0,
+          1.0,
+        );
+
+        final lat =
+            originLat +
+            (destLat - originLat) * progress +
+            (rand.nextDouble() - 0.5) * 0.001;
+        final lng =
+            originLng +
+            (destLng - originLng) * progress +
+            (rand.nextDouble() - 0.5) * 0.001;
+
+        double airTemp;
+        double waterTemp;
+        int humidity;
+        int airQuality;
+
+        if (isColdAndSafe) {
+          // Cold chain aman: 1.2°C s/d 2.8°C
+          airTemp = double.parse(
+            (1.2 + rand.nextDouble() * 1.6).toStringAsFixed(1),
+          );
+          waterTemp = double.parse(
+            (-0.5 + rand.nextDouble() * 0.5).toStringAsFixed(2),
+          );
+          humidity = 60 + rand.nextInt(15);
+          airQuality = 40 + rand.nextInt(35);
+        } else {
+          // Anomali: di atas 4°C
+          airTemp = double.parse(
+            (8.5 + rand.nextDouble() * 6.0).toStringAsFixed(1),
+          );
+          waterTemp = double.parse(
+            (3.5 + rand.nextDouble() * 4.0).toStringAsFixed(2),
+          );
+          humidity = 70 + rand.nextInt(25);
+          airQuality = 150 + rand.nextInt(150);
+        }
+
+        final avgTemp = double.parse(
+          ((airTemp + waterTemp) / 2).toStringAsFixed(2),
+        );
+
+        final sample = <String, dynamic>{
+          'air_quality_value': airQuality,
+          'air_temperature_c': airTemp,
+          'average_temperature_c': avgTemp,
+          'humidity_pct': humidity,
+          'latitude': double.parse(lat.toStringAsFixed(6)),
+          'longitude': double.parse(lng.toStringAsFixed(6)),
+          'timestamp': timestamp,
+          'water_temperature_c': waterTemp,
+        };
+
+        updates['suhu/$coolboxId/history/$key'] = sample;
+        lastSample = sample;
+        lastKey = key;
+      }
+
+      if (lastSample != null && lastKey != null) {
+        updates['suhu/$coolboxId/latest'] = lastSample;
+        updates['suhu/$coolboxId/sync_meta/latest_id'] = lastKey;
+      }
+
+      await _db.ref().update(updates);
+      debugPrint(
+        'RealtimeDB: Seeded $initialHistoryCount telemetry points for $coolboxId (latest: $lastKey)',
+      );
+    } catch (e) {
+      debugPrint('RealtimeDB seedSuhuTelemetry notice: $e');
+    }
+  }
+
+  /// Simulates a single live tick of coolbox telemetry in Realtime Database.
+  /// Updates `latest`, appends to `history/<key>`, and advances `sync_meta/latest_id`.
+  Future<void> simulateSuhuTelemetryTick({
+    String coolboxId = 'SFR-CB-002',
+    double? airTemperature,
+    double? waterTemperature,
+    int? humidity,
+    int? airQuality,
+    double? latitude,
+    double? longitude,
+  }) async {
+    try {
+      final counter = await _getNextCounter(coolboxId);
+      final key = _formatHistoryKey(counter);
+      final nowIso = DateTime.now().toUtc().toIso8601String();
+      final rand = math.Random();
+
+      final airTemp =
+          airTemperature ??
+          double.parse((1.5 + rand.nextDouble() * 1.5).toStringAsFixed(1));
+      final waterTemp =
+          waterTemperature ??
+          double.parse((-0.3 + rand.nextDouble() * 0.4).toStringAsFixed(2));
+      final avgTemp = double.parse(
+        ((airTemp + waterTemp) / 2).toStringAsFixed(2),
+      );
+      final hum = humidity ?? (60 + rand.nextInt(15));
+      final aq = airQuality ?? (50 + rand.nextInt(30));
+      final lat = latitude ?? -4.8378;
+      final lng = longitude ?? 119.5372;
+
+      final sample = <String, dynamic>{
+        'air_quality_value': aq,
+        'air_temperature_c': airTemp,
+        'average_temperature_c': avgTemp,
+        'humidity_pct': hum,
+        'latitude': double.parse(lat.toStringAsFixed(6)),
+        'longitude': double.parse(lng.toStringAsFixed(6)),
+        'timestamp': nowIso,
+        'water_temperature_c': waterTemp,
+      };
+
+      final updates = <String, dynamic>{
+        'suhu/$coolboxId/history/$key': sample,
+        'suhu/$coolboxId/latest': sample,
+        'suhu/$coolboxId/sync_meta/latest_id': key,
+      };
+
+      await _db.ref().update(updates);
+      debugPrint('RealtimeDB simulation tick: $coolboxId -> $key ($airTemp°C)');
+    } catch (e) {
+      debugPrint('RealtimeDB simulateSuhuTelemetryTick notice: $e');
+    }
+  }
+
+  Timer? _simulationTimer;
+  bool get isSimulationRunning => _simulationTimer?.isActive ?? false;
+
+  /// Starts periodic simulation of coolbox temperature telemetry.
+  void startLiveSuhuSimulation({
+    String coolboxId = 'SFR-CB-002',
+    Duration interval = const Duration(seconds: 3),
+    bool isColdAndSafe = true,
+  }) {
+    stopLiveSuhuSimulation();
+    debugPrint(
+      'RealtimeDB: Starting live suhu simulation for $coolboxId every ${interval.inSeconds}s',
+    );
+    _simulationTimer = Timer.periodic(interval, (_) {
+      simulateSuhuTelemetryTick(coolboxId: coolboxId);
+    });
+  }
+
+  /// Stops the active periodic simulation timer.
+  void stopLiveSuhuSimulation() {
+    _simulationTimer?.cancel();
+    _simulationTimer = null;
   }
 
   /// Seeds distributor user accounts into Firebase Authentication and Realtime Database

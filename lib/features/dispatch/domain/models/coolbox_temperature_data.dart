@@ -9,6 +9,8 @@ class CoolboxTemperatureData {
     this.waterTemperatureC,
     this.humidityPct,
     this.airQualityValue,
+    this.latitude,
+    this.longitude,
     this.timestamp,
     this.frostScore,
   });
@@ -19,6 +21,8 @@ class CoolboxTemperatureData {
   final double? waterTemperatureC;
   final double? humidityPct;
   final double? airQualityValue;
+  final double? latitude;
+  final double? longitude;
   final DateTime? timestamp;
   final int? frostScore;
 
@@ -52,6 +56,9 @@ class CoolboxTemperatureData {
       parsedScore = FrostScoreCalculator.calculateSingleSnapshot(effectiveTemp).scoreInt;
     }
 
+    final lat = toDouble(map['latitude'] ?? map['lat']);
+    final lng = toDouble(map['longitude'] ?? map['lng'] ?? map['lon']);
+
     return CoolboxTemperatureData(
       coolboxId: coolboxId,
       averageTemperatureC: avgTemp,
@@ -63,6 +70,8 @@ class CoolboxTemperatureData {
       airQualityValue: toDouble(
         map['air_quality_value'] ?? map['airQualityValue'],
       ),
+      latitude: lat,
+      longitude: lng,
       timestamp: map['timestamp'] != null
           ? DateTime.tryParse(map['timestamp'].toString())
           : null,

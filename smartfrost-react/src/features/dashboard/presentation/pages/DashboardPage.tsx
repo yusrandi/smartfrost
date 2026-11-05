@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ChevronDown, RefreshCw, X, Box, RotateCcw, Database, Thermometer } from 'lucide-react';
+import { ChevronDown, RefreshCw, X, Box, RotateCcw, Database, Thermometer, Info } from 'lucide-react';
 import { MetricCardsGrid } from '../components/MetricCardsGrid';
 import { TemperatureChartCard } from '../components/TemperatureChartCard';
 import { FrostScoreTrendCard } from '../components/FrostScoreTrendCard';
@@ -165,6 +165,18 @@ export const DashboardPage: React.FC = () => {
     if (!selectedBatch) return null;
     return findCoolboxSuhu(suhuMap, selectedBatch.coolboxId);
   }, [suhuMap, selectedBatch]);
+
+  const modalFrostScore = useMemo(() => {
+    return selectedModalSuhu?.frostScore?.score ?? selectedBatch?.frostScore ?? 0;
+  }, [selectedModalSuhu, selectedBatch]);
+
+  const modalCategory = useMemo(() => {
+    return FrostScoreCalculator.getCategory(modalFrostScore);
+  }, [modalFrostScore]);
+
+  const modalBadgeStyle = useMemo(() => {
+    return FrostScoreCalculator.getBadgeStyle(modalFrostScore);
+  }, [modalFrostScore]);
 
   // Option B: Real average temperature from the valid /suhu table (across active coldboxes)
   const realAverageTemp = useMemo(() => {
@@ -474,9 +486,17 @@ export const DashboardPage: React.FC = () => {
 
               <div className="rounded-xl bg-slate-50 p-3 border border-slate-100">
                 <span className="text-slate-400 text-[11px]">FrostScore / Risiko:</span>
-                <p className="font-bold text-slate-900 mt-0.5">
-                  {selectedBatch.frostScore} ({selectedBatch.riskLevel})
-                </p>
+                <div className="mt-0.5 flex items-center gap-1.5 flex-wrap">
+                  <span className="font-bold text-slate-900 font-mono text-sm">
+                    {modalFrostScore}
+                  </span>
+                  <span
+                    className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-semibold border ${modalBadgeStyle.badgeClass}`}
+                  >
+                    <span className={`h-1.5 w-1.5 rounded-full ${modalBadgeStyle.dotClass}`} />
+                    {modalCategory}
+                  </span>
+                </div>
               </div>
 
               <div className="rounded-xl bg-slate-50 p-3 border border-slate-100">
@@ -495,6 +515,42 @@ export const DashboardPage: React.FC = () => {
                 </p>
               </div>
             </div>
+
+            {/* Breakdown Komponen Penalti FrostScore IoT (jika ada data sensor) */}
+            {selectedModalSuhu?.frostScore && (
+              <div className="rounded-xl border border-slate-200/80 p-3 bg-white space-y-2">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                  <Info className="h-3.5 w-3.5 text-sky-600" />
+                  <span>Komposisi Penalti Rumus SMART-FROST</span>
+                </div>
+                <div className="grid grid-cols-4 gap-2 text-center text-[10.5px]">
+                  <div className="rounded-lg bg-slate-50 p-1.5 border border-slate-100">
+                    <span className="text-slate-400 block text-[9.5px]">Dosis Termal (40%)</span>
+                    <span className="font-bold text-slate-800 font-mono">
+                      {selectedModalSuhu.frostScore.pThermal}%
+                    </span>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 p-1.5 border border-slate-100">
+                    <span className="text-slate-400 block text-[9.5px]">Durasi (25%)</span>
+                    <span className="font-bold text-slate-800 font-mono">
+                      {selectedModalSuhu.frostScore.pExposure}%
+                    </span>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 p-1.5 border border-slate-100">
+                    <span className="text-slate-400 block text-[9.5px]">Variansi (15%)</span>
+                    <span className="font-bold text-slate-800 font-mono">
+                      {selectedModalSuhu.frostScore.pStability}%
+                    </span>
+                  </div>
+                  <div className="rounded-lg bg-slate-50 p-1.5 border border-slate-100">
+                    <span className="text-slate-400 block text-[9.5px]">Anomali (20%)</span>
+                    <span className="font-bold text-slate-800 font-mono">
+                      {selectedModalSuhu.frostScore.pAnomaly}%
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="flex items-center justify-between pt-2">
               <span className="text-[11px] text-slate-400">

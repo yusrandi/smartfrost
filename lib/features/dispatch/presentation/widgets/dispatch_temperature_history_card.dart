@@ -10,6 +10,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_card.dart';
 import '../../data/services/firestore_dispatch_service.dart';
 import '../../domain/models/coolbox_history_reading.dart';
+import '../../domain/models/coolbox_temperature_data.dart';
 
 /// Card that streams and visualizes air temperature history (`air_temperature_c`)
 /// over time (`timestamp`) from RTDB `/suhu/$coolboxId/history`.
@@ -27,269 +28,304 @@ class DispatchTemperatureHistoryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<CoolboxHistoryReading>>(
-      stream: FirestoreDispatchService.instance.streamCoolboxTemperatureHistory(
+    return StreamBuilder<CoolboxTemperatureData?>(
+      stream: FirestoreDispatchService.instance.streamCoolboxLatest(
         coolboxId,
         batchId: batchId,
         isReceiver: isReceiver,
       ),
-      builder: (context, snapshot) {
-        final readings = snapshot.data ?? const [];
+      builder: (context, latestSnapshot) {
+        final latestDb = latestSnapshot.data;
 
-        if (readings.isEmpty) {
-          // Waiting / Empty State Card
-          return AppCard(
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        return StreamBuilder<List<CoolboxHistoryReading>>(
+          stream: FirestoreDispatchService.instance
+              .streamCoolboxTemperatureHistory(
+                coolboxId,
+                batchId: batchId,
+                isReceiver: isReceiver,
+              ),
+          builder: (context, historySnapshot) {
+            final readings = historySnapshot.data ?? const [];
+
+            if (readings.isEmpty && latestDb == null) {
+              // Waiting / Empty State Card
+              return AppCard(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'SENSOR SUHU',
-                      style: AppTypography.overline.copyWith(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.primary,
-                        letterSpacing: 1.1,
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFF1F5F9),
-                        borderRadius: AppRadius.radiusPill,
-                      ),
-                      child: Text(
-                        'Menunggu sensor',
-                        style: AppTypography.caption.copyWith(
-                          color: AppColors.textSecondary,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'SENSOR SUHU',
+                          style: AppTypography.overline.copyWith(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primary,
+                            letterSpacing: 1.1,
+                          ),
                         ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFF1F5F9),
+                            borderRadius: AppRadius.radiusPill,
+                          ),
+                          child: Text(
+                            'Menunggu sensor',
+                            style: AppTypography.caption.copyWith(
+                              color: AppColors.textSecondary,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      'Riwayat suhu',
+                      style: AppTypography.cardTitle.copyWith(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
+                    const SizedBox(height: AppSpacing.xl),
+                    Center(
+                      child: Column(
+                        children: [
+                          const Icon(
+                            LucideIcons.thermometer,
+                            size: 32,
+                            color: Color(0xFF94A3B8),
+                          ),
+                          const SizedBox(height: AppSpacing.sm),
+                          Text(
+                            'Menunggu data sensor',
+                            style: AppTypography.body.copyWith(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Diagram dan angka suhu akan diperbarui saat sensor terhubung.',
+                            textAlign: TextAlign.center,
+                            style: AppTypography.caption.copyWith(
+                              color: AppColors.textSecondary,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
                   ],
                 ),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  'Riwayat suhu',
-                  style: AppTypography.cardTitle.copyWith(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.xl),
-                Center(
-                  child: Column(
+              );
+            }
+
+            // Active State: Mengambil suhu & timestamp langsung dari object `latest` database (/suhu/$coolboxId/latest)
+            final latestAirTemp = latestDb?.airTemperatureC ??
+                latestDb?.averageTemperatureC ??
+                (readings.isNotEmpty ? readings.last.airTemperatureC : null);
+
+            final latestTimestamp = latestDb?.timestamp ??
+                (readings.isNotEmpty ? readings.last.timestamp : null);
+
+            final timeStr = latestTimestamp != null
+                ? '${latestTimestamp.hour.toString().padLeft(2, '0')}:${latestTimestamp.minute.toString().padLeft(2, '0')} WITA'
+                : 'Baru saja';
+
+            return AppCard(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Icon(
-                        LucideIcons.thermometer,
-                        size: 32,
-                        color: Color(0xFF94A3B8),
-                      ),
-                      const SizedBox(height: AppSpacing.sm),
                       Text(
-                        'Menunggu data sensor',
-                        style: AppTypography.body.copyWith(
+                        'SENSOR SUHU',
+                        style: AppTypography.overline.copyWith(
+                          fontSize: 11,
                           fontWeight: FontWeight.w700,
-                          fontSize: 13,
-                          color: AppColors.textPrimary,
+                          color: AppColors.primary,
+                          letterSpacing: 1.1,
                         ),
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Diagram dan angka suhu akan diperbarui saat sensor terhubung.',
-                        textAlign: TextAlign.center,
-                        style: AppTypography.caption.copyWith(
-                          color: AppColors.textSecondary,
-                          fontSize: 11,
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 3.5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFDCFCE7),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF16A34A),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 5),
+                            Text(
+                              readings.isNotEmpty
+                                  ? 'Live • ${readings.length} logs'
+                                  : 'Live • Realtime',
+                              style: const TextStyle(
+                                color: Color(0xFF15803D),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
-                ),
-                const SizedBox(height: AppSpacing.md),
-              ],
-            ),
-          );
-        }
-
-        // Active State with Line Chart
-        final latest = readings.last;
-        final timeStr =
-            '${latest.timestamp.hour.toString().padLeft(2, '0')}:${latest.timestamp.minute.toString().padLeft(2, '0')} WITA';
-
-        return AppCard(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
+                  const SizedBox(height: AppSpacing.xs),
                   Text(
-                    'SENSOR SUHU',
-                    style: AppTypography.overline.copyWith(
-                      fontSize: 11,
+                    'Riwayat suhu',
+                    style: AppTypography.cardTitle.copyWith(
+                      fontSize: 15,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.primary,
-                      letterSpacing: 1.1,
                     ),
                   ),
+                  const SizedBox(height: AppSpacing.md),
+
+                  // Latest Temperature Banner Box (dari object latest database)
                   Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 9,
-                      vertical: 3.5,
+                      horizontal: 14,
+                      vertical: 10,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFDCFCE7),
-                      borderRadius: BorderRadius.circular(20),
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
                     ),
                     child: Row(
-                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF16A34A),
-                            shape: BoxShape.circle,
-                          ),
+                        Row(
+                          children: [
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF0284C7),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              latestAirTemp != null
+                                  ? '${latestAirTemp.toStringAsFixed(1)}°C'
+                                  : '—°C',
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF0F172A),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Suhu udara • $timeStr',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: Color(0xFF64748B),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 5),
-                        Text(
-                          'Live • ${readings.length} logs',
-                          style: const TextStyle(
-                            color: Color(0xFF15803D),
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE0F2FE),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Text(
+                            'air_temperature_c',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF0284C7),
+                              fontFamily: 'monospace',
+                            ),
                           ),
                         ),
                       ],
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                'Riwayat suhu',
-                style: AppTypography.cardTitle.copyWith(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.md),
+                  const SizedBox(height: AppSpacing.md),
 
-              // Latest Temperature Banner Box
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 10,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF0284C7),
-                            shape: BoxShape.circle,
-                          ),
+                  // Sumbu Y & Sumbu X Line Chart
+                  if (readings.isNotEmpty)
+                    Container(
+                      height: 175,
+                      width: double.infinity,
+                      padding: const EdgeInsets.only(top: 8, bottom: 4),
+                      child: CustomPaint(
+                        painter: _AirTemperatureChartPainter(readings),
+                      ),
+                    )
+                  else
+                    Container(
+                      height: 120,
+                      alignment: Alignment.center,
+                      child: Text(
+                        'Menunggu akumulasi riwayat untuk diagram...',
+                        style: AppTypography.caption.copyWith(
+                          color: AppColors.textSecondary,
                         ),
-                        const SizedBox(width: 8),
-                        Text(
-                          '${latest.airTemperatureC.toStringAsFixed(1)}°C',
+                      ),
+                    ),
+                  const SizedBox(height: AppSpacing.sm),
+
+                  // Footnote & Axis Description
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        LucideIcons.info,
+                        size: 13,
+                        color: Color(0xFF0284C7),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Sumbu Y: Suhu udara (air_temperature_c) • Sumbu X: Waktu sensor (timestamp)',
                           style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xFF0F172A),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Suhu udara • $timeStr',
-                          style: const TextStyle(
-                            fontSize: 11,
+                            fontSize: 10.5,
                             color: Color(0xFF64748B),
+                            height: 1.3,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
-                      ],
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
                       ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE0F2FE),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Text(
-                        'air_temperature_c',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF0284C7),
-                          fontFamily: 'monospace',
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: AppSpacing.md),
-
-              // Sumbu Y & Sumbu X Line Chart
-              Container(
-                height: 175,
-                width: double.infinity,
-                padding: const EdgeInsets.only(top: 8, bottom: 4),
-                child: CustomPaint(
-                  painter: _AirTemperatureChartPainter(readings),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-
-              // Footnote & Axis Description
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(
-                    LucideIcons.info,
-                    size: 13,
-                    color: Color(0xFF0284C7),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      'Sumbu Y: Suhu udara (air_temperature_c) • Sumbu X: Waktu sensor (timestamp)',
-                      style: const TextStyle(
-                        fontSize: 10.5,
-                        color: Color(0xFF64748B),
-                        height: 1.3,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
+                    ],
                   ),
                 ],
               ),
-            ],
-          ),
+            );
+          },
         );
       },
     );

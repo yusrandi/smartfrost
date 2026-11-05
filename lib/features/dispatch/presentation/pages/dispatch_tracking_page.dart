@@ -191,10 +191,10 @@ class DispatchTrackingPage extends StatelessWidget {
             StreamBuilder<List<CoolboxHistoryReading>>(
               stream: FirestoreDispatchService.instance
                   .streamCoolboxTemperatureHistory(
-                data.coolboxId,
-                batchId: data.batchId,
-                isReceiver: false,
-              ),
+                    data.coolboxId,
+                    batchId: data.batchId,
+                    isReceiver: false,
+                  ),
               builder: (context, snapshot) {
                 final readings = snapshot.data ?? const [];
                 final hasReadings = readings.isNotEmpty;
@@ -202,7 +202,9 @@ class DispatchTrackingPage extends StatelessWidget {
                 final FrostScoreResult result;
                 if (hasReadings) {
                   final temps = readings.map((r) => r.airTemperatureC).toList();
-                  result = FrostScoreCalculator.calculateFromTemperatures(temps);
+                  result = FrostScoreCalculator.calculateFromTemperatures(
+                    temps,
+                  );
                 } else {
                   result = const FrostScoreResult(
                     score: 96.0,
@@ -254,7 +256,9 @@ class DispatchTrackingPage extends StatelessWidget {
                             ),
                             const SizedBox(height: 6),
                             Text(
-                              hasReadings ? '${result.scoreInt} / 100' : '96 / 100',
+                              hasReadings
+                                  ? '${result.scoreInt} / 100'
+                                  : '96 / 100',
                               textAlign: TextAlign.center,
                               style: AppTypography.cardTitle.copyWith(
                                 fontSize: 16,
@@ -320,6 +324,7 @@ class DispatchTrackingPage extends StatelessWidget {
             // PELACAKAN PERJALANAN (Lokasi GPS real-time & Sea Route Map)
             DispatchTrackingMapCard(
               batchId: data.batchId,
+              coolboxId: data.coolboxId,
               originLocation: data.originLocation,
               destinationLocation: data.destinationLocation,
               receiverName: data.receiverName,

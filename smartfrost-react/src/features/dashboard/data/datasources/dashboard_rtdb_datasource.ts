@@ -10,6 +10,8 @@ export interface CoolboxSuhuState {
   averageTemp: number | null;
   waterTemp: number | null;
   humidityPct: number | null;
+  latitude?: number | null;
+  longitude?: number | null;
   lastTimestampStr: string;
   dataPoints: TemperatureDataPoint[];
   frostScore?: FrostScoreResult;
@@ -257,35 +259,38 @@ export class DashboardRtdbDatasource {
           const raw = snapshot.val() as Record<string, Record<string, unknown>>;
           const map: Record<string, CoolboxSuhuState> = {};
 
+          const parseNumeric = (val: unknown): number | null => {
+            if (val === null || val === undefined) return null;
+            if (typeof val === 'number') return isNaN(val) ? null : val;
+            if (typeof val === 'string') {
+              const parsed = parseFloat(val);
+              return isNaN(parsed) ? null : parsed;
+            }
+            return null;
+          };
+
           for (const [coolboxKey, boxData] of Object.entries(raw)) {
             if (!boxData || typeof boxData !== 'object' || coolboxKey === 'sync_meta') continue;
 
             const latest = (boxData.latest as Record<string, unknown>) || {};
             const history = (boxData.history as Record<string, Record<string, unknown>>) || {};
 
-            const latestAirTemp = typeof latest.air_temperature_c === 'number' ? latest.air_temperature_c : null;
-            const averageTemp = typeof latest.average_temperature_c === 'number' ? latest.average_temperature_c : null;
-            const waterTemp = typeof latest.water_temperature_c === 'number' ? latest.water_temperature_c : null;
-            const humidityPct = typeof latest.humidity_pct === 'number' ? latest.humidity_pct : null;
-
-            let lastTimestampStr = '';
-            if (latest.timestamp) {
-              const { timeStr } = formatTimestamp(latest.timestamp);
-              lastTimestampStr = timeStr;
-            }
+            let latestAirTemp = parseNumeric(latest.air_temperature_c);
+            let averageTemp = parseNumeric(latest.average_temperature_c);
+            let waterTemp = parseNumeric(latest.water_temperature_c);
+            let humidityPct = parseNumeric(latest.humidity_pct);
+            let latitude = parseNumeric(latest.latitude ?? latest.lat);
+            let longitude = parseNumeric(latest.longitude ?? latest.lng ?? latest.lon);
 
             // Parse history points
-            const pointsWithTs: Array<{ time: string; temp: number; ts: number }> = [];
+            const pointsWithTs: Array<{ time: string; temp: number; ts: number; raw: Record<string, unknown> }> = [];
 
             if (history && typeof history === 'object') {
               for (const entry of Object.values(history)) {
                 if (!entry || typeof entry !== 'object') continue;
                 const tempVal =
-                  typeof entry.air_temperature_c === 'number'
-                    ? entry.air_temperature_c
-                    : typeof entry.average_temperature_c === 'number'
-                      ? entry.average_temperature_c
-                      : null;
+                  parseNumeric(entry.air_temperature_c) ??
+                  parseNumeric(entry.average_temperature_c);
 
                 if (tempVal !== null) {
                   let epoch = 0;
@@ -309,6 +314,7 @@ export class DashboardRtdbDatasource {
                     time: timeLabel,
                     temp: Number(tempVal.toFixed(1)),
                     ts: epoch,
+                    raw: entry,
                   });
                 }
               }
@@ -316,6 +322,38 @@ export class DashboardRtdbDatasource {
 
             // Sort chronologically (earliest to latest)
             pointsWithTs.sort((a, b) => a.ts - b.ts);
+            const latestHistoryItem = pointsWithTs.length > 0 ? pointsWithTs[pointsWithTs.length - 1] : null;
+
+            // Fallback suhu jika latest.air_temperature_c belum terisi
+            if (latestAirTemp === null) {
+              latestAirTemp = averageTemp ?? (latestHistoryItem ? latestHistoryItem.temp : null);
+            }
+
+            // Fallback GPS dari history jika latest belum memiliki koordinat
+            if (latitude === null && latestHistoryItem) {
+              latitude = parseNumeric(latestHistoryItem.raw.latitude ?? latestHistoryItem.raw.lat);
+            }
+            if (longitude === null && latestHistoryItem) {
+              longitude = parseNumeric(
+                latestHistoryItem.raw.longitude ?? latestHistoryItem.raw.lng ?? latestHistoryItem.raw.lon
+              );
+            }
+
+            // Fallback Timestamp: Jika di node latest tidak ada timestamp, ambil dari latest history entry
+            let lastTimestampStr = '';
+            if (latest.timestamp) {
+              const { timeStr } = formatTimestamp(latest.timestamp);
+              lastTimestampStr = timeStr;
+            } else if (latestHistoryItem) {
+              if (latestHistoryItem.raw.timestamp) {
+                const { timeStr } = formatTimestamp(latestHistoryItem.raw.timestamp);
+                lastTimestampStr = timeStr;
+              } else {
+                lastTimestampStr = `${latestHistoryItem.time} WITA`;
+              }
+            } else if (latestAirTemp !== null) {
+              lastTimestampStr = 'Baru saja';
+            }
 
             const dataPoints: TemperatureDataPoint[] = pointsWithTs.map((p) => ({
               time: p.time,
@@ -323,8 +361,13 @@ export class DashboardRtdbDatasource {
             }));
 
             // Official SMART-FROST Calculation from IoT Sensor History
+            // Jika history kosong tapi latestAirTemp ada, gunakan sampel latest agar suhu anomali langsung terdeteksi
             const frostScore = FrostScoreCalculator.calculate(
-              pointsWithTs.map((p) => ({ temp: p.temp }))
+              pointsWithTs.length > 0
+                ? pointsWithTs.map((p) => ({ temp: p.temp }))
+                : latestAirTemp !== null
+                  ? [{ temp: latestAirTemp }]
+                  : []
             );
 
             map[coolboxKey] = {
@@ -333,6 +376,8 @@ export class DashboardRtdbDatasource {
               averageTemp,
               waterTemp,
               humidityPct,
+              latitude,
+              longitude,
               lastTimestampStr,
               dataPoints,
               frostScore,

@@ -925,6 +925,120 @@ class RealtimeDispatchService {
     return controller.stream;
   }
 
+  /// Realtime stream of the latest telemetry (temperature, GPS, humidity) from `/suhu/$coolboxId/latest`.
+  /// Automatically resolves coolbox ID formats (e.g. SFR-CB-001 <-> SFR-CB-01).
+  Stream<CoolboxTemperatureData?> streamCoolboxLatest(
+    String rawCoolboxId, {
+    String? batchId,
+    bool isReceiver = false,
+    UserProfile? user,
+  }) {
+    final clean = rawCoolboxId.trim();
+    if (Firebase.apps.isEmpty) {
+      return const Stream.empty();
+    }
+
+    late StreamController<CoolboxTemperatureData?> controller;
+    StreamSubscription? sub;
+
+    controller = StreamController<CoolboxTemperatureData?>(
+      onListen: () async {
+        final actualKey = await _resolveActualSuhuKey(
+          clean,
+          batchId: batchId,
+          isReceiver: isReceiver,
+          user: user,
+        );
+
+        if (actualKey.isEmpty) {
+          controller.add(null);
+          return;
+        }
+
+        sub = _db.ref('suhu/$actualKey/latest').onValue.listen(
+          (event) async {
+            if (!event.snapshot.exists || event.snapshot.value == null) {
+              if (!controller.isClosed) controller.add(null);
+              return;
+            }
+            final val = event.snapshot.value;
+            if (val is Map) {
+              final map = _toMap(val);
+              // Fallback GPS dari sync_meta / history jika di /latest belum ada field latitude/longitude
+              if ((map['latitude'] == null && map['lat'] == null) ||
+                  (map['longitude'] == null &&
+                      map['lng'] == null &&
+                      map['lon'] == null)) {
+                try {
+                  final metaSnap = await _db
+                      .ref('suhu/$actualKey/sync_meta/latest_id')
+                      .get();
+                  if (metaSnap.exists && metaSnap.value != null) {
+                    final latestId = metaSnap.value.toString();
+                    final histSnap = await _db
+                        .ref('suhu/$actualKey/history/$latestId')
+                        .get();
+                    if (histSnap.exists && histSnap.value is Map) {
+                      final hMap = _toMap(histSnap.value);
+                      if (hMap['latitude'] != null) {
+                        map['latitude'] = hMap['latitude'];
+                      }
+                      if (hMap['longitude'] != null) {
+                        map['longitude'] = hMap['longitude'];
+                      }
+                      if (map['timestamp'] == null &&
+                          hMap['timestamp'] != null) {
+                        map['timestamp'] = hMap['timestamp'];
+                      }
+                    }
+                  }
+                  if (map['latitude'] == null || map['longitude'] == null) {
+                    final lastHistSnap = await _db
+                        .ref('suhu/$actualKey/history')
+                        .limitToLast(1)
+                        .get();
+                    if (lastHistSnap.exists && lastHistSnap.value is Map) {
+                      final hMap = _toMap(lastHistSnap.value);
+                      if (hMap.isNotEmpty) {
+                        final firstVal = hMap.values.first;
+                        if (firstVal is Map) {
+                          if (firstVal['latitude'] != null) {
+                            map['latitude'] = firstVal['latitude'];
+                          }
+                          if (firstVal['longitude'] != null) {
+                            map['longitude'] = firstVal['longitude'];
+                          }
+                          if (map['timestamp'] == null &&
+                              firstVal['timestamp'] != null) {
+                            map['timestamp'] = firstVal['timestamp'];
+                          }
+                        }
+                      }
+                    }
+                  }
+                } catch (_) {}
+              }
+              if (!controller.isClosed) {
+                controller.add(CoolboxTemperatureData.fromMap(actualKey, map));
+              }
+            } else {
+              if (!controller.isClosed) controller.add(null);
+            }
+          },
+          onError: (_) {
+            if (!controller.isClosed) controller.add(null);
+          },
+        );
+      },
+      onCancel: () {
+        sub?.cancel();
+        controller.close();
+      },
+    );
+
+    return controller.stream;
+  }
+
   /// Realtime stream of temperature history from `/suhu/$coolboxId/history`.
   /// Automatically resolves coolbox ID formats (e.g. SFR-CB-001 <-> SFR-CB-01).
   /// If [isReceiver] is true, resolves coolboxId by matching receiverEmail == user.email in `/dispatches`.

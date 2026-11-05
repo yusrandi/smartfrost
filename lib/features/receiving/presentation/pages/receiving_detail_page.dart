@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:firebase_core/firebase_core.dart';
@@ -13,6 +14,7 @@ import '../../../auth/domain/services/auth_session.dart';
 import '../../../../core/services/frost_score_calculator.dart';
 import '../../../dispatch/data/services/firestore_dispatch_service.dart';
 import '../../../dispatch/domain/models/coolbox_history_reading.dart';
+import '../../../dispatch/domain/models/coolbox_temperature_data.dart';
 import '../../../dispatch/presentation/widgets/dispatch_temperature_history_card.dart';
 import '../../../dispatch/presentation/widgets/dispatch_tracking_map_card.dart';
 
@@ -68,6 +70,7 @@ class _ReceivingDetailPageState extends State<ReceivingDetailPage> {
   late double _currentTemperature;
   late int _currentFrostScore;
   bool _isProcessing = false;
+  StreamSubscription<CoolboxTemperatureData?>? _coolboxSub;
 
   @override
   void initState() {
@@ -75,6 +78,37 @@ class _ReceivingDetailPageState extends State<ReceivingDetailPage> {
     _currentStatus = widget.initialStatus;
     _currentTemperature = widget.temperature;
     _currentFrostScore = widget.frostScore;
+
+    // Stream suhu & score terkini langsung dari objek /suhu/{coolboxId}/latest database
+    if (widget.coolboxId.isNotEmpty) {
+      _coolboxSub = FirestoreDispatchService.instance
+          .streamCoolboxLatest(
+            widget.coolboxId,
+            batchId: widget.batchId,
+            isReceiver: true,
+          )
+          .listen((latest) {
+        if (!mounted || latest == null) return;
+        final temp = latest.airTemperatureC ?? latest.averageTemperatureC;
+        setState(() {
+          if (temp != null) {
+            _currentTemperature = temp;
+          }
+          if (latest.frostScore != null) {
+            _currentFrostScore = latest.frostScore!;
+          } else if (temp != null && temp > FrostScoreCalculator.safeTempLimit) {
+            _currentFrostScore =
+                FrostScoreCalculator.calculateSingleSnapshot(temp).scoreInt;
+          }
+        });
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _coolboxSub?.cancel();
+    super.dispose();
   }
 
   bool get _isDecided {
@@ -353,6 +387,7 @@ class _ReceivingDetailPageState extends State<ReceivingDetailPage> {
               // 5. GPS Real-time Journey Tracking Map Card (Live Leaflet/FlutterMap)
               DispatchTrackingMapCard(
                 batchId: widget.batchId,
+                coolboxId: widget.coolboxId,
                 originLocation: widget.originLocation,
                 destinationLocation: widget.destinationLocation,
                 receiverName: widget.receiverName ?? user?.name ?? 'Penerima',

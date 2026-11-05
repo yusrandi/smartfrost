@@ -14,6 +14,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/app_card.dart';
 import '../../../auth/domain/services/auth_session.dart';
 import '../../data/services/firestore_dispatch_service.dart';
+import '../../domain/models/coolbox_temperature_data.dart';
 import '../../domain/models/location_coordinate.dart';
 
 /// Interactive real-time GPS sea logistics tracking map powered by Leaflet (FlutterMap),
@@ -23,6 +24,7 @@ class DispatchTrackingMapCard extends StatefulWidget {
   const DispatchTrackingMapCard({
     super.key,
     this.batchId = 'SFR-KK-201',
+    this.coolboxId,
     this.originLocation = 'Dermaga Maccini Baji',
     this.destinationLocation = 'Pulau Jangang-Jangangan',
     this.receiverName = 'Andi Jemma',
@@ -33,6 +35,7 @@ class DispatchTrackingMapCard extends StatefulWidget {
   });
 
   final String batchId;
+  final String? coolboxId;
   final String originLocation;
   final String destinationLocation;
   final String receiverName;
@@ -52,6 +55,7 @@ class _DispatchTrackingMapCardState extends State<DispatchTrackingMapCard> {
   // Subscriptions & Timers
   StreamSubscription<Position>? _positionSubscription;
   StreamSubscription<DatabaseEvent>? _rtdbSubscription;
+  StreamSubscription<CoolboxTemperatureData?>? _coolboxSubscription;
   Timer? _heartbeatTimer;
 
   // Hybrid Throttling State (Pengirim / Courier)
@@ -62,6 +66,7 @@ class _DispatchTrackingMapCardState extends State<DispatchTrackingMapCard> {
 
   LatLng? _courierPosition;
   bool _isGpsActive = false;
+  bool _isCoolboxGpsActive = false;
   String _calculatedDistance = '— km';
   String _lastUpdatedText = 'Belum tersedia';
   double? _gpsAccuracy;
@@ -85,6 +90,11 @@ class _DispatchTrackingMapCardState extends State<DispatchTrackingMapCard> {
     _lastUpdatedText = widget.initialLastUpdated;
     _isGpsActive = widget.isGpsReceived;
 
+    // Prioritaskan pemantauan GPS dari telemetri Coolbox IoT `/suhu/{coolboxId}/latest`
+    if (widget.coolboxId != null && widget.coolboxId!.trim().isNotEmpty) {
+      _initCoolboxLatestStream();
+    }
+
     if (widget.isSender) {
       _initGpsTracking();
       // Heartbeat timer check setiap 10 detik
@@ -101,10 +111,64 @@ class _DispatchTrackingMapCardState extends State<DispatchTrackingMapCard> {
   @override
   void dispose() {
     _positionSubscription?.cancel();
+    _coolboxSubscription?.cancel();
     _heartbeatTimer?.cancel();
     _rtdbSubscription?.cancel();
     _mapController.dispose();
     super.dispose();
+  }
+
+  void _initCoolboxLatestStream() {
+    final cb = widget.coolboxId?.trim();
+    if (cb == null || cb.isEmpty) return;
+
+    _coolboxSubscription = FirestoreDispatchService.instance
+        .streamCoolboxLatest(
+          cb,
+          batchId: widget.batchId,
+          isReceiver: !widget.isSender,
+        )
+        .listen((latest) {
+      if (!mounted || latest == null) return;
+      final lat = latest.latitude;
+      final lng = latest.longitude;
+      if (lat != null && lng != null && lat != 0.0 && lng != 0.0) {
+        final courierLatLng = LatLng(lat, lng);
+        final distanceMeters = Geolocator.distanceBetween(
+          lat,
+          lng,
+          _destCoord.latitude,
+          _destCoord.longitude,
+        );
+
+        String timeStr = 'Baru saja';
+        if (latest.timestamp != null) {
+          final dt = latest.timestamp!;
+          timeStr =
+              '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')} WITA';
+        }
+
+        setState(() {
+          _courierPosition = courierLatLng;
+          _isGpsActive = true;
+          _isCoolboxGpsActive = true;
+          _calculatedDistance =
+              '${(distanceMeters / 1000).toStringAsFixed(1)} km';
+          _lastUpdatedText = timeStr;
+        });
+
+        // Jika pengirim, sinkronkan koordinat Coolbox IoT ke node dispatches/{batchId}
+        if (widget.isSender && widget.batchId.isNotEmpty) {
+          FirestoreDispatchService.instance.updateDispatchLocation(
+            batchId: widget.batchId,
+            latitude: lat,
+            longitude: lng,
+            distanceRemaining: _calculatedDistance,
+            isMocked: false,
+          );
+        }
+      }
+    });
   }
 
   void _initReceiverStream() {
@@ -212,6 +276,11 @@ class _DispatchTrackingMapCardState extends State<DispatchTrackingMapCard> {
 
   void _updatePosition(Position pos) {
     if (!mounted) return;
+
+    // Jika sinyal GPS Coolbox IoT aktif, utamakan posisi sensor IoT Coolbox
+    if (_isCoolboxGpsActive) {
+      return;
+    }
 
     if (pos.isMocked) {
       _mockGpsDetected = true;
@@ -393,12 +462,16 @@ class _DispatchTrackingMapCardState extends State<DispatchTrackingMapCard> {
       _destCoord.toLatLng,
     ];
 
-    // Status Badge Logic (Sender vs Receiver & Real vs Mock GPS)
+    // Status Badge Logic (Coolbox IoT GPS vs Phone GPS vs Receiver RTDB)
     final String badgeText;
     final Color badgeBg;
     final Color badgeTextColor;
 
-    if (widget.isSender) {
+    if (_isCoolboxGpsActive) {
+      badgeText = 'GPS Coolbox IoT';
+      badgeBg = const Color(0xFFE0F2FE);
+      badgeTextColor = const Color(0xFF0369A1);
+    } else if (widget.isSender) {
       if (_isGpsActive) {
         if (_isMockedGpsActive) {
           badgeText = 'Fake GPS (15m/3s)';
@@ -430,7 +503,12 @@ class _DispatchTrackingMapCardState extends State<DispatchTrackingMapCard> {
 
     // Bottom Pill Status Logic
     final String statusPillText;
-    if (widget.isSender) {
+    if (_isCoolboxGpsActive) {
+      final cbLabel = widget.coolboxId?.isNotEmpty == true
+          ? widget.coolboxId!
+          : 'Coolbox IoT';
+      statusPillText = 'GPS Coolbox ($cbLabel) • Real-time RTDB';
+    } else if (widget.isSender) {
       if (_isGpsActive) {
         if (_isMockedGpsActive) {
           statusPillText = 'Fake GPS Aktif • Throttling 15m / 3s';
@@ -452,7 +530,13 @@ class _DispatchTrackingMapCardState extends State<DispatchTrackingMapCard> {
 
     // Footnote Logic
     final String footnoteText;
-    if (widget.isSender) {
+    if (_isCoolboxGpsActive) {
+      final cbLabel = widget.coolboxId?.isNotEmpty == true
+          ? widget.coolboxId!
+          : 'Coolbox';
+      footnoteText =
+          'Pelacakan aktif menggunakan koordinat GPS modul sensor IoT Coolbox ($cbLabel) dari database /suhu secara real-time.';
+    } else if (widget.isSender) {
       if (_isMockedGpsActive) {
         footnoteText =
             'Mode Fake GPS terdeteksi: Throttling adaptif aktif (jarak 15m / jeda 3s, heartbeat 45s) agar responsif diuji coba menggunakan joystick.';
