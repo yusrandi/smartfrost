@@ -1,5 +1,3 @@
-import '../../../../core/services/frost_score_calculator.dart';
-
 /// Model representing the latest coolbox temperature telemetry from RTDB `/suhu/$coolboxId/latest`.
 class CoolboxTemperatureData {
   const CoolboxTemperatureData({
@@ -24,7 +22,9 @@ class CoolboxTemperatureData {
   final double? latitude;
   final double? longitude;
   final DateTime? timestamp;
-  final int? frostScore;
+  final double? frostScore;
+
+  int? get frostScoreInt => frostScore?.round();
 
   factory CoolboxTemperatureData.fromMap(
     String coolboxId,
@@ -46,14 +46,14 @@ class CoolboxTemperatureData {
     final waterTemp = toDouble(
       map['water_temperature_c'] ?? map['waterTemperatureC'],
     );
-    final effectiveTemp = airTemp ?? avgTemp;
 
-    int? parsedScore = map['frostScore'] is num
-        ? (map['frostScore'] as num).toInt()
-        : null;
-
-    if (parsedScore == null && effectiveTemp != null) {
-      parsedScore = FrostScoreCalculator.calculateSingleSnapshot(effectiveTemp).scoreInt;
+    // Ambil langsung field frostscore dari tabel suhu (tanpa perhitungan)
+    final rawFrostScore = map['frostscore'] ?? map['frostScore'];
+    double? parsedScore;
+    if (rawFrostScore is num) {
+      parsedScore = rawFrostScore.toDouble();
+    } else if (rawFrostScore is String) {
+      parsedScore = double.tryParse(rawFrostScore);
     }
 
     final lat = toDouble(map['latitude'] ?? map['lat']);

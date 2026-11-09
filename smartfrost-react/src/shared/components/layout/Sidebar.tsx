@@ -8,7 +8,12 @@ import {
   FileText, 
   User,
   LogOut,
-  X
+  X,
+  Database,
+  Fish,
+  Box,
+  MapPin,
+  Users
 } from 'lucide-react';
 import { NAVIGATION_ITEMS, APP_METADATA } from '../../../core/constants/navigation';
 import { useAuth } from '../../../features/auth/context/AuthContext';
@@ -46,6 +51,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
         return <MapIcon className={iconClass} />;
       case 'reports':
         return <FileText className={iconClass} />;
+      case 'master_data':
+        return <Database className={iconClass} />;
+      case 'fish':
+        return <Fish className={iconClass} />;
+      case 'box':
+        return <Box className={iconClass} />;
+      case 'mapPin':
+        return <MapPin className={iconClass} />;
+      case 'users':
+        return <Users className={iconClass} />;
       case 'profile':
         return <User className={iconClass} />;
       default:
@@ -117,12 +132,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {user?.agency || 'Dinas Perikanan Kab. Pangkep'}
             </div>
             <div className="text-[11px] text-slate-400 truncate">
-              {user?.region || 'Kabupaten Pangkep'}
+              {Boolean(user?.isAdmin || user?.role?.toLowerCase().includes('admin'))
+                ? 'Tata Kelola Data Referensi Sistem'
+                : (user?.region || 'Kabupaten Pangkep')}
             </div>
           </div>
 
           <div className="inline-flex items-center gap-1.5 rounded-full bg-white px-2.5 py-0.5 shadow-sm">
-            <span className="h-1.5 w-1.5 rounded-full bg-teal-600 animate-pulse" />
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                Boolean(user?.isAdmin || user?.role?.toLowerCase().includes('admin'))
+                  ? 'bg-amber-600'
+                  : 'bg-teal-600 animate-pulse'
+              }`}
+            />
             <span className="text-[10px] font-bold text-slate-800">
               {user?.role || 'Akses pemantauan'}
             </span>
@@ -131,21 +154,39 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Navigation Menu */}
         <nav className="space-y-1 pt-1">
-          {NAVIGATION_ITEMS.map((item) => {
+          {Boolean(user?.isAdmin || user?.role?.toLowerCase().includes('admin')) && (
+            <div className="px-3 pt-2 pb-1 text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center justify-between">
+              <span>Data Master Sistem</span>
+              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-400/20 text-amber-300 border border-amber-400/30">
+                Admin
+              </span>
+            </div>
+          )}
+          {NAVIGATION_ITEMS.filter((item) => {
+            const isAdmin = Boolean(user?.isAdmin || user?.role?.toLowerCase().includes('admin'));
+            if (isAdmin) {
+              // Administrator HANYA memiliki akses ke halaman-halaman Data Master dan Profil
+              return item.adminOnly || item.id === 'profile';
+            }
+            // Petugas pemantauan/operator hanya melihat menu operasional dan profil
+            return !item.adminOnly;
+          }).map((item) => {
             const isActive = activeTab === item.id;
             return (
               <button
                 key={item.id}
                 type="button"
                 onClick={() => handleTabClick(item.id)}
-                className={`group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all duration-150 text-left cursor-pointer ${
+                className={`group w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all duration-150 text-left cursor-pointer ${
                   isActive
                     ? 'bg-[#1890C7] text-white shadow-md shadow-sky-900/20 font-bold'
                     : 'text-slate-300 hover:text-white hover:bg-white/[0.06]'
                 }`}
               >
-                {getIcon(item.iconName, isActive)}
-                <span className="truncate">{item.label}</span>
+                <div className="flex items-center gap-3 min-w-0">
+                  {getIcon(item.iconName, isActive)}
+                  <span className="truncate">{item.label}</span>
+                </div>
               </button>
             );
           })}

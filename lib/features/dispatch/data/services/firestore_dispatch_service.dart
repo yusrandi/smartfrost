@@ -1538,15 +1538,31 @@ class RealtimeDispatchService {
     return false;
   }
 
-  /// Saves or updates distributor user profile into Realtime Database `/users` and `/distributors`.
+  /// Helper to sanitize RTDB node keys
+  static String _sanitizeKey(String key) {
+    return key.trim().replaceAll(RegExp(r'[.#$\[\]/\s]+'), '_');
+  }
+
+  /// Saves or updates distributor user profile into Realtime Database `/users` (key: sanitized email)
+  /// and `/distributors` (key: sanitized dock/location).
   Future<void> saveUserProfile(UserProfile profile, {String? uid}) async {
     try {
       if (Firebase.apps.isEmpty) return;
-      final docId =
-          uid ??
-          (profile.email.isNotEmpty
-              ? profile.email.replaceAll('.', '_')
-              : profile.name);
+
+      final resolvedUid = (uid != null && uid.isNotEmpty)
+          ? uid
+          : FirebaseAuth.instance.currentUser?.uid;
+
+      final cleanEmailKey = profile.email.isNotEmpty
+          ? _sanitizeKey(profile.email)
+          : null;
+
+      final distKey = _sanitizeKey(
+        profile.storeLocation.isNotEmpty
+            ? profile.storeLocation
+            : (profile.name.isNotEmpty ? profile.name : 'Dermaga_Maccini_Baji'),
+      );
+
       final profileMap = <String, dynamic>{
         'name': profile.name,
         'organization': profile.organization,
@@ -1562,11 +1578,9 @@ class RealtimeDispatchService {
         'permissionsDescription': profile.permissionsDescription,
         'updatedAt': ServerValue.timestamp,
       };
-      if (uid != null) {
-        profileMap['uid'] = uid;
+      if (resolvedUid != null && resolvedUid.isNotEmpty) {
+        profileMap['uid'] = resolvedUid;
       }
-
-      await _db.ref('users/$docId').update(profileMap);
 
       final distributorMap = <String, dynamic>{
         'name': profile.name,
@@ -1578,14 +1592,43 @@ class RealtimeDispatchService {
         'isDistributor': true,
         'updatedAt': ServerValue.timestamp,
       };
-      if (uid != null) {
-        distributorMap['uid'] = uid;
+      if (resolvedUid != null && resolvedUid.isNotEmpty) {
+        distributorMap['uid'] = resolvedUid;
       }
 
-      await _db.ref('distributors/$docId').update(distributorMap);
+      // 1. Simpan ke node users dengan key EMAIL (human-readable & unik per user)
+      if (cleanEmailKey != null && cleanEmailKey.isNotEmpty) {
+        await _db.ref('users/$cleanEmailKey').update(profileMap);
+      }
+
+      // 2. Simpan ke node distributors dengan key NAMA DERMAGA/PULAU (human-readable & unik per dermaga)
+      if (distKey.isNotEmpty) {
+        await _db.ref('distributors/$distKey').update(distributorMap);
+      }
+
+      // 3. Bersihkan entri duplikat lama dengan key UUID jika ada (migrasi otomatis)
+      if (resolvedUid != null && resolvedUid.isNotEmpty) {
+        if (cleanEmailKey != null && resolvedUid != cleanEmailKey) {
+          try {
+            final oldUuidUserSnap = await _db.ref('users/$resolvedUid').get();
+            if (oldUuidUserSnap.exists) {
+              await _db.ref('users/$resolvedUid').remove();
+            }
+          } catch (_) {}
+        }
+        if (resolvedUid != distKey) {
+          try {
+            final oldUuidDistSnap =
+                await _db.ref('distributors/$resolvedUid').get();
+            if (oldUuidDistSnap.exists) {
+              await _db.ref('distributors/$resolvedUid').remove();
+            }
+          } catch (_) {}
+        }
+      }
 
       debugPrint(
-        'Realtime Database: Distributor user profile ${profile.name} saved successfully.',
+        'Realtime Database: User profile ${profile.name} saved under users/$cleanEmailKey and distributors/$distKey.',
       );
     } catch (e) {
       debugPrint('Realtime Database saveUserProfile notice: $e');

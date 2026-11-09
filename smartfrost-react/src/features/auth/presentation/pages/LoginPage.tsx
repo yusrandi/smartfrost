@@ -189,15 +189,32 @@ export const LoginPage: React.FC = () => {
                   key={usr.id}
                   type="button"
                   onClick={() => handleQuickLogin(usr.id)}
-                  className="w-full text-left p-2.5 rounded-xl border border-slate-200/80 hover:border-sky-300 hover:bg-sky-50/50 bg-white flex items-center justify-between transition-all group cursor-pointer"
+                  className={`w-full text-left p-2.5 rounded-xl border transition-all group cursor-pointer flex items-center justify-between ${
+                    usr.isAdmin
+                      ? 'border-amber-200 bg-amber-50/40 hover:bg-amber-50 hover:border-amber-300'
+                      : 'border-slate-200/80 hover:border-sky-300 hover:bg-sky-50/50 bg-white'
+                  }`}
                 >
                   <div className="flex items-center gap-2.5">
-                    <div className="h-8 w-8 rounded-full bg-sky-100 text-[#0284C7] text-xs font-black flex items-center justify-center border border-sky-200/60">
+                    <div
+                      className={`h-8 w-8 rounded-full text-xs font-black flex items-center justify-center border ${
+                        usr.isAdmin
+                          ? 'bg-amber-100 text-amber-800 border-amber-300'
+                          : 'bg-sky-100 text-[#0284C7] border-sky-200/60'
+                      }`}
+                    >
                       {usr.initials}
                     </div>
                     <div>
-                      <div className="text-xs font-bold text-slate-800 group-hover:text-sky-700">
-                        {usr.name}
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-slate-800 group-hover:text-sky-700">
+                          {usr.name}
+                        </span>
+                        {usr.isAdmin && (
+                          <span className="text-[9px] font-extrabold uppercase tracking-wider px-1.5 py-0.2 rounded-full bg-amber-200/70 text-amber-900 border border-amber-300">
+                            Admin
+                          </span>
+                        )}
                       </div>
                       <div className="text-[10.5px] text-slate-500">
                         {usr.role} &bull; <span className="font-mono text-[10px]">{usr.email}</span>

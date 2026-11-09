@@ -180,11 +180,8 @@ class _HomePageState extends State<HomePage> {
             dispatchData['destinationLocation'] as String? ??
             (user?.storeLocation ?? 'Pulau Karanrang');
         final temp = (dispatchData['temperature'] as num?)?.toDouble() ?? -2.4;
-        final rawScore = (dispatchData['frostScore'] as num?)?.toInt();
-        final frostScore = rawScore ??
-            (temp > FrostScoreCalculator.safeTempLimit
-                ? FrostScoreCalculator.calculateSingleSnapshot(temp).scoreInt
-                : 96);
+        final rawScore = (dispatchData['frostscore'] ?? dispatchData['frostScore'] as num?)?.toDouble();
+        final frostScore = rawScore?.round() ?? 96;
         final status = dispatchData['status'] as String? ?? 'Dalam Perjalanan';
 
         String formattedDate = 'Hari ini';
@@ -321,11 +318,8 @@ class _HomePageState extends State<HomePage> {
           dispatchData['destinationLocation'] as String? ??
           (user?.storeLocation ?? 'Pulau Karanrang');
       final temp = (dispatchData['temperature'] as num?)?.toDouble() ?? -2.4;
-      final rawScore = (dispatchData['frostScore'] as num?)?.toInt();
-      final frostScore = rawScore ??
-          (temp > FrostScoreCalculator.safeTempLimit
-              ? FrostScoreCalculator.calculateSingleSnapshot(temp).scoreInt
-              : 96);
+      final rawScore = (dispatchData['frostscore'] ?? dispatchData['frostScore'] as num?)?.toDouble();
+      final frostScore = rawScore?.round() ?? 96;
       final status = dispatchData['status'] as String? ?? item.status.label;
 
       Navigator.of(context).push(
@@ -498,14 +492,19 @@ class _HomePageState extends State<HomePage> {
                                   final String scoreText;
                                   final String statusText;
 
-                                  if (avgTemp != null) {
-                                    final fs = tempData?.frostScore ??
-                                        FrostScoreCalculator.calculateSingleSnapshot(avgTemp).scoreInt;
-                                    final category = FrostScoreCalculator.getCategory(fs);
-                                    scoreText = '$fs';
+                                  if (tempData?.frostScore != null) {
+                                    final fsDouble = tempData!.frostScore!;
+                                    final category =
+                                        FrostScoreCalculator.getCategory(fsDouble);
+                                    scoreText = fsDouble.toStringAsFixed(1);
                                     statusText = coolboxId.isNotEmpty
-                                        ? 'Coolbox $coolboxId • Suhu ${avgTemp.toStringAsFixed(1)}°C (${category.label})'
-                                        : 'Suhu ${avgTemp.toStringAsFixed(1)}°C (${category.label})';
+                                        ? 'Coolbox $coolboxId • Suhu ${avgTemp?.toStringAsFixed(1) ?? "-"}°C (${category.label})'
+                                        : 'Suhu ${avgTemp?.toStringAsFixed(1) ?? "-"}°C (${category.label})';
+                                  } else if (avgTemp != null) {
+                                    scoreText = 'N/A';
+                                    statusText = coolboxId.isNotEmpty
+                                        ? 'Coolbox $coolboxId • Suhu ${avgTemp.toStringAsFixed(1)}°C'
+                                        : 'Suhu ${avgTemp.toStringAsFixed(1)}°C';
                                   } else {
                                     scoreText = 'N/A';
                                     statusText = realItems.isNotEmpty

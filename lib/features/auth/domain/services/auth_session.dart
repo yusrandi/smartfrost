@@ -42,6 +42,54 @@ class AuthSession extends ChangeNotifier {
 
   /// Restore user profile matching authenticated email address
   Future<void> restoreFromEmail(String email, {String? uid}) async {
+    // 1. Prioritas utama: Muat profil pengguna yang tersimpan di Realtime Database
+    try {
+      if (Firebase.apps.isNotEmpty) {
+        DataSnapshot? snap;
+        if (email.isNotEmpty) {
+          final cleanEmailKey =
+              email.trim().replaceAll(RegExp(r'[.#$\[\]/\s]+'), '_');
+          snap =
+              await FirebaseDatabase.instance.ref('users/$cleanEmailKey').get();
+        }
+        if ((snap == null || !snap.exists || snap.value == null) &&
+            uid != null &&
+            uid.isNotEmpty) {
+          snap = await FirebaseDatabase.instance.ref('users/$uid').get();
+        }
+
+        if (snap != null && snap.exists && snap.value is Map) {
+          final data = Map<String, dynamic>.from(snap.value as Map);
+          final storeLoc = (data['storeLocation'] as String? ?? '').trim();
+          final lat = (data['latitude'] as num?)?.toDouble();
+          final lng = (data['longitude'] as num?)?.toDouble();
+
+          _currentUser = UserProfile(
+            name: data['name'] ?? _formatNameFromEmail(email),
+            organization: data['organization'] ??
+                data['name'] ??
+                'Distributor Pangkep',
+            location: data['location'] ?? 'Kabupaten Pangkep',
+            email: email,
+            storeLocation:
+                storeLoc.isNotEmpty ? storeLoc : 'Dermaga Maccini Baji',
+            latitude: lat ?? -4.8378,
+            longitude: lng ?? 119.5372,
+            accessRoleLabel:
+                data['accessRoleLabel'] ?? 'Akses Pengirim ikan',
+            permissionsDescription: data['permissionsDescription'] ??
+                'Membuat dan melihat pengiriman',
+            phoneNumber: data['phoneNumber'] ?? '+62 812-4210-9876',
+          );
+          notifyListeners();
+          return;
+        }
+      }
+    } catch (e) {
+      debugPrint('AuthSession restoreFromEmail RTDB notice: $e');
+    }
+
+    // 2. Fallback: jika di database belum ada, cek distributor default bawaan
     final matchedDist = _matchDistributorByEmail(email);
     if (matchedDist != null) {
       _currentUser = UserProfile(
@@ -59,30 +107,7 @@ class AuthSession extends ChangeNotifier {
       return;
     }
 
-    try {
-      if (Firebase.apps.isNotEmpty) {
-        final cleanDocId = (uid ?? email).replaceAll('.', '_');
-        final snap = await FirebaseDatabase.instance.ref('users/$cleanDocId').get();
-        if (snap.exists && snap.value is Map) {
-          final data = Map<String, dynamic>.from(snap.value as Map);
-          _currentUser = UserProfile(
-            name: data['name'] ?? _formatNameFromEmail(email),
-            organization: data['organization'] ?? 'Distributor Pangkep',
-            location: data['location'] ?? 'Kabupaten Pangkep',
-            email: email,
-            storeLocation: data['storeLocation'] ?? 'Dermaga Maccini Baji',
-            latitude: (data['latitude'] as num?)?.toDouble() ?? -4.8378,
-            longitude: (data['longitude'] as num?)?.toDouble() ?? 119.5372,
-            accessRoleLabel: data['accessRoleLabel'] ?? 'Akses Pengirim ikan',
-            permissionsDescription:
-                data['permissionsDescription'] ?? 'Membuat dan melihat pengiriman',
-          );
-          notifyListeners();
-          return;
-        }
-      }
-    } catch (_) {}
-
+    // 3. Fallback terakhir jika akun baru dan offline
     final formattedName = _formatNameFromEmail(email);
     _currentUser = UserProfile(
       name: formattedName,
@@ -137,32 +162,65 @@ class AuthSession extends ChangeNotifier {
     String? uid,
   }) async {
     final isDispatch = roleIndex == 0;
+
+    // Baca profil yang tersimpan di RTDB terlebih dahulu agar storeLocation tidak tertimpa default
+    Map<String, dynamic>? existingData;
+    try {
+      if (Firebase.apps.isNotEmpty) {
+        DataSnapshot? snap;
+        if (email.isNotEmpty) {
+          final cleanEmailKey =
+              email.trim().replaceAll(RegExp(r'[.#$\[\]/\s]+'), '_');
+          snap =
+              await FirebaseDatabase.instance.ref('users/$cleanEmailKey').get();
+        }
+        if ((snap == null || !snap.exists || snap.value == null) &&
+            uid != null &&
+            uid.isNotEmpty) {
+          snap = await FirebaseDatabase.instance.ref('users/$uid').get();
+        }
+        if (snap != null && snap.exists && snap.value is Map) {
+          existingData = Map<String, dynamic>.from(snap.value as Map);
+        }
+      }
+    } catch (_) {}
+
     final matchedDist = _matchDistributorByEmail(email);
 
     final resolvedName = name ??
+        existingData?['name'] ??
         matchedDist?.name ??
         (email.isNotEmpty
             ? _formatNameFromEmail(email)
             : (isDispatch ? 'Pengirim' : 'Penerima'));
 
-    final resolvedStore = storeLocation ??
-        matchedDist?.storeLocation ??
-        'Dermaga Maccini Baji';
+    final existingStore =
+        (existingData?['storeLocation'] as String? ?? '').trim();
+    final resolvedStore = (storeLocation != null && storeLocation.isNotEmpty)
+        ? storeLocation
+        : (existingStore.isNotEmpty
+            ? existingStore
+            : (matchedDist?.storeLocation ?? 'Dermaga Maccini Baji'));
 
     final resolvedOrg = organization ??
+        existingData?['organization'] ??
         matchedDist?.organization ??
         resolvedName;
 
     final defaultCoord = LocationCoordinate.resolve(resolvedStore);
-    final resolvedLat =
-        latitude ?? matchedDist?.latitude ?? defaultCoord.latitude;
-    final resolvedLng =
-        longitude ?? matchedDist?.longitude ?? defaultCoord.longitude;
+    final resolvedLat = latitude ??
+        (existingData?['latitude'] as num?)?.toDouble() ??
+        matchedDist?.latitude ??
+        defaultCoord.latitude;
+    final resolvedLng = longitude ??
+        (existingData?['longitude'] as num?)?.toDouble() ??
+        matchedDist?.longitude ??
+        defaultCoord.longitude;
 
     _currentUser = UserProfile(
       name: resolvedName,
       organization: resolvedOrg,
-      location: 'Kabupaten Pangkep',
+      location: existingData?['location'] ?? 'Kabupaten Pangkep',
       email: email,
       storeLocation: resolvedStore,
       latitude: resolvedLat,
@@ -172,12 +230,14 @@ class AuthSession extends ChangeNotifier {
       permissionsDescription: isDispatch
           ? 'Membuat dan melihat pengiriman'
           : 'Menerima dan memeriksa pengiriman',
+      phoneNumber: existingData?['phoneNumber'] ?? '+62 812-4210-9876',
     );
     notifyListeners();
-    FirestoreDispatchService.instance.saveUserProfile(_currentUser!, uid: uid);
+    await FirestoreDispatchService.instance
+        .saveUserProfile(_currentUser!, uid: uid);
   }
 
-  void register({
+  Future<void> register({
     required String name,
     required String email,
     required String password,
@@ -186,13 +246,13 @@ class AuthSession extends ChangeNotifier {
     double? latitude,
     double? longitude,
     String? uid,
-  }) {
+  }) async {
     final isDispatch = roleIndex == 0;
     final resolvedName = name.isNotEmpty
         ? name
         : (email.isNotEmpty ? _formatNameFromEmail(email) : 'Pengguna');
-    final resolvedStore = storeLocation.isNotEmpty
-        ? storeLocation
+    final resolvedStore = storeLocation.trim().isNotEmpty
+        ? storeLocation.trim()
         : 'Dermaga Maccini Baji';
 
     // Auto-resolve known port/island coordinates or fallback
@@ -215,7 +275,8 @@ class AuthSession extends ChangeNotifier {
           : 'Menerima dan memeriksa pengiriman',
     );
     notifyListeners();
-    FirestoreDispatchService.instance.saveUserProfile(_currentUser!, uid: uid);
+    await FirestoreDispatchService.instance
+        .saveUserProfile(_currentUser!, uid: uid);
   }
 
   /// Updates distributor location and geographical coordinates dynamically

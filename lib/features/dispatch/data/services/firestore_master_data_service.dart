@@ -115,7 +115,7 @@ class FirestoreMasterDataService {
   }
 
   static String _sanitizeKey(String key) {
-    return key.replaceAll(RegExp(r'[.#$\[\]/]'), '_');
+    return key.trim().replaceAll(RegExp(r'[.#$\[\]/\s]+'), '_');
   }
 
   static Map<String, dynamic> _toMap(dynamic val) {
@@ -419,6 +419,7 @@ class FirestoreMasterDataService {
           'longitude': double.parse(lng.toStringAsFixed(6)),
           'timestamp': timestamp,
           'water_temperature_c': waterTemp,
+          'frostscore': isColdAndSafe ? 96.5 : 34.98,
         };
 
         updates['suhu/$coolboxId/history/$key'] = sample;
@@ -480,6 +481,7 @@ class FirestoreMasterDataService {
         'longitude': double.parse(lng.toStringAsFixed(6)),
         'timestamp': nowIso,
         'water_temperature_c': waterTemp,
+        'frostscore': (airTemp <= 4.0) ? 96.5 : 34.98,
       };
 
       final updates = <String, dynamic>{
@@ -591,9 +593,9 @@ class FirestoreMasterDataService {
           }
         }
 
-        // 1. Simpan ke node 'users' di Realtime Database
+        // 1. Simpan ke node 'users' di Realtime Database dengan key EMAIL (human-readable)
         try {
-          final cleanEmailKey = distributor.email.replaceAll('.', '_');
+          final cleanEmailKey = _sanitizeKey(distributor.email);
           final userMap = <String, dynamic>{
             'name': distributor.name,
             'organization': distributor.organization,
@@ -607,7 +609,7 @@ class FirestoreMasterDataService {
             'permissionsDescription': 'Menerima dan mengirim ikan',
             'updatedAt': ServerValue.timestamp,
           };
-          if (uid != null) {
+          if (uid != null && uid.isNotEmpty) {
             userMap['uid'] = uid;
           }
 
@@ -616,14 +618,35 @@ class FirestoreMasterDataService {
           debugPrint('RealtimeDB users seed notice: $e');
         }
 
-        // 2. Simpan ke node 'distributors' di Realtime Database
+        // 2. Simpan ke node 'distributors' di Realtime Database dengan key NAMA DERMAGA/PULAU
         try {
-          final distDocId = _sanitizeKey(distributor.name);
+          final distLocation = distributor.storeLocation.isNotEmpty
+              ? distributor.storeLocation
+              : distributor.name;
+          final distKey = _sanitizeKey(distLocation);
           final distData = distributor.toMap();
-          if (uid != null) distData['uid'] = uid;
+          if (uid != null && uid.isNotEmpty) {
+            distData['uid'] = uid;
+          }
           distData['updatedAt'] = ServerValue.timestamp;
 
-          await _db.ref('distributors/$distDocId').update(distData);
+          await _db.ref('distributors/$distKey').update(distData);
+
+          // Bersihkan entri duplikat lama dengan key UUID jika ada
+          if (uid != null && uid.isNotEmpty) {
+            if (uid != cleanEmailKey) {
+              try {
+                final oldUserSnap = await _db.ref('users/$uid').get();
+                if (oldUserSnap.exists) await _db.ref('users/$uid').remove();
+              } catch (_) {}
+            }
+            if (uid != distKey) {
+              try {
+                final oldDistSnap = await _db.ref('distributors/$uid').get();
+                if (oldDistSnap.exists) await _db.ref('distributors/$uid').remove();
+              } catch (_) {}
+            }
+          }
         } catch (e) {
           debugPrint('RealtimeDB distributors seed notice: $e');
         }
@@ -714,6 +737,23 @@ class FirestoreMasterDataService {
     } catch (_) {
       return Stream.value(defaultFishes);
     }
+  }
+
+  /// Adds a new fish type to Realtime Database master_fishes
+  Future<String> addFishType(String name) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return '';
+    try {
+      final safeKey = _sanitizeKey(trimmed);
+      await _db.ref('master_fishes/$safeKey').set({
+        'name': trimmed,
+        'createdAt': ServerValue.timestamp,
+      });
+      debugPrint('RealtimeDB: Added new fish type "$trimmed".');
+    } catch (e) {
+      debugPrint('Failed to add fish type to RealtimeDB: $e');
+    }
+    return trimmed;
   }
 
   /// Realtime stream of weight options from RTDB

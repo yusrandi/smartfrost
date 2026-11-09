@@ -13,7 +13,6 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../auth/domain/services/auth_session.dart';
 import '../../../../core/services/frost_score_calculator.dart';
 import '../../../dispatch/data/services/firestore_dispatch_service.dart';
-import '../../../dispatch/domain/models/coolbox_history_reading.dart';
 import '../../../dispatch/domain/models/coolbox_temperature_data.dart';
 import '../../../dispatch/presentation/widgets/dispatch_temperature_history_card.dart';
 import '../../../dispatch/presentation/widgets/dispatch_tracking_map_card.dart';
@@ -95,10 +94,7 @@ class _ReceivingDetailPageState extends State<ReceivingDetailPage> {
             _currentTemperature = temp;
           }
           if (latest.frostScore != null) {
-            _currentFrostScore = latest.frostScore!;
-          } else if (temp != null && temp > FrostScoreCalculator.safeTempLimit) {
-            _currentFrostScore =
-                FrostScoreCalculator.calculateSingleSnapshot(temp).scoreInt;
+            _currentFrostScore = latest.frostScore!.round();
           }
         });
       });
@@ -453,13 +449,10 @@ class _ReceivingDetailPageState extends State<ReceivingDetailPage> {
               _currentTemperature =
                   (data['temperature'] as num?)?.toDouble() ??
                       _currentTemperature;
-              final parsedScore = (data['frostScore'] as num?)?.toInt();
-              if (parsedScore != null) {
-                _currentFrostScore = parsedScore;
-              } else if (_currentTemperature > FrostScoreCalculator.safeTempLimit) {
-                _currentFrostScore = FrostScoreCalculator.calculateSingleSnapshot(
-                  _currentTemperature,
-                ).scoreInt;
+              final rawScore =
+                  (data['frostscore'] ?? data['frostScore'] as num?)?.toDouble();
+              if (rawScore != null) {
+                _currentFrostScore = rawScore.round();
               }
             }
           }
@@ -778,44 +771,19 @@ class _FrostScoreAnalysisCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<CoolboxHistoryReading>>(
-      stream: FirestoreDispatchService.instance.streamCoolboxTemperatureHistory(
+    return StreamBuilder<CoolboxTemperatureData?>(
+      stream: FirestoreDispatchService.instance.streamCoolboxLatest(
         coolboxId,
         batchId: batchId,
         isReceiver: true,
       ),
       builder: (context, snapshot) {
-        final readings = snapshot.data ?? const [];
-        final hasReadings = readings.isNotEmpty;
-
-        final FrostScoreResult res;
-        if (hasReadings) {
-          final temps = readings.map((r) => r.airTemperatureC).toList();
-          res = FrostScoreCalculator.calculateFromTemperatures(temps);
-        } else if (temperature != null && temperature! > FrostScoreCalculator.safeTempLimit) {
-          res = FrostScoreCalculator.calculateSingleSnapshot(temperature!);
-        } else {
-          final displayScore = frostScore.clamp(0, 100);
-          final penalty = (100 - displayScore).toDouble().clamp(0.0, 100.0);
-          res = FrostScoreResult(
-            score: displayScore.toDouble(),
-            pTotal: penalty,
-            pThermal: penalty,
-            pExposure: penalty,
-            pStability: penalty,
-            pAnomaly: penalty,
-            category: FrostScoreCalculator.getCategory(displayScore),
-          );
-        }
-
-        final displayScore = res.scoreInt;
-        final penalty = res.pTotal;
-        final pThermal = res.pThermal;
-        final pExposure = res.pExposure;
-        final pStability = res.pStability;
-        final pAnomaly = res.pAnomaly;
-        final qualityText = res.category.label;
-        final qualityColor = res.statusColor;
+        final latest = snapshot.data;
+        final rawScore = latest?.frostScore ?? frostScore.toDouble();
+        final displayScore = rawScore.round().clamp(0, 100);
+        final category = FrostScoreCalculator.getCategory(rawScore);
+        final qualityText = category.label;
+        final qualityColor = FrostScoreCalculator.getStatusColor(rawScore);
 
         return Container(
           padding: const EdgeInsets.all(AppSpacing.lg),
@@ -886,7 +854,7 @@ class _FrostScoreAnalysisCard extends StatelessWidget {
                         ),
                         const SizedBox(height: 1),
                         Text(
-                          '100 - ${penalty.toStringAsFixed(2)} total penalti',
+                          'Nilai sensor: ${rawScore.toStringAsFixed(2)} / 100',
                           style: const TextStyle(
                             fontSize: 11,
                             color: Color(0xFF64748B),
@@ -900,51 +868,34 @@ class _FrostScoreAnalysisCard extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.md),
 
-              // 4 Grid Metric Penalty Cards (Thermal, Exposure, Stability, Anomaly)
-              Row(
-                children: [
-                  _buildPenaltyCard('Thermal', '40%', pThermal.toStringAsFixed(1)),
-                  const SizedBox(width: 6),
-                  _buildPenaltyCard('Exposure', '25%', pExposure.toStringAsFixed(1)),
-                  const SizedBox(width: 6),
-                  _buildPenaltyCard('Stability', '15%', pStability.toStringAsFixed(1)),
-                  const SizedBox(width: 6),
-                  _buildPenaltyCard('Anomaly', '20%', pAnomaly.toStringAsFixed(1)),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.sm),
-
-              // Formula Box (Ptotal)
+              // Telemetry Info Banner
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF0F9FF),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: const Color(0xFFE0F2FE)),
                 ),
-                child: RichText(
-                  text: TextSpan(
-                    children: [
-                      const TextSpan(
-                        text: 'Ptotal  ',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
+                child: Row(
+                  children: [
+                    const Icon(
+                      LucideIcons.activity,
+                      size: 15,
+                      color: Color(0xFF0284C7),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Sensor IoT $coolboxId • FrostScore: ${rawScore.toStringAsFixed(2)} ($qualityText)',
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
                           color: Color(0xFF0369A1),
                         ),
                       ),
-                      TextSpan(
-                        text:
-                            '(0,40 × ${pThermal.toStringAsFixed(1)}) + (0,25 × ${pExposure.toStringAsFixed(1)}) + (0,15 × ${pStability.toStringAsFixed(1)}) + (0,20 × ${pAnomaly.toStringAsFixed(1)}) = ${penalty.toStringAsFixed(2)}',
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
-                          color: Color(0xFF0284C7),
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
@@ -982,17 +933,17 @@ class _FrostScoreAnalysisCard extends StatelessWidget {
               // Footnote
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Icon(
+                children: [
+                  const Icon(
                     LucideIcons.info,
                     size: 13,
                     color: Color(0xFF0891B2),
                   ),
-                  SizedBox(width: 6),
+                  const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      'Formula: FrostScore = max(0, 100 - P_total) sesuai regulasi rantai dingin SMART-FROST.',
-                      style: TextStyle(
+                      'Nilai FrostScore dibaca langsung dari field frostscore tabel telemetri suhu IoT coolbox $coolboxId.',
+                      style: const TextStyle(
                         fontSize: 10.5,
                         color: Color(0xFF64748B),
                         height: 1.3,
@@ -1005,54 +956,6 @@ class _FrostScoreAnalysisCard extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-
-  Widget _buildPenaltyCard(String title, String weight, String score) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-        decoration: BoxDecoration(
-          color: const Color(0xFFF8FAFC),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 9.5,
-                    color: Color(0xFF64748B),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                Text(
-                  weight,
-                  style: const TextStyle(
-                    fontSize: 8.5,
-                    color: Color(0xFF0891B2),
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 3),
-            Text(
-              score,
-              style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF0F172A),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 

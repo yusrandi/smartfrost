@@ -218,6 +218,34 @@ class FrostScoreCalculator {
     }
   }
 
+  static Color getBadgeBackground(num score) {
+    final cat = getCategory(score);
+    switch (cat) {
+      case FrostScoreCategory.sangatBaik:
+        return const Color(0xFFECFDF5);
+      case FrostScoreCategory.baik:
+        return const Color(0xFFF7FEE7);
+      case FrostScoreCategory.waspada:
+        return const Color(0xFFFFFBEB);
+      case FrostScoreCategory.risikoTinggi:
+        return const Color(0xFFFEF2F2);
+    }
+  }
+
+  static Color getBadgeBorder(num score) {
+    final cat = getCategory(score);
+    switch (cat) {
+      case FrostScoreCategory.sangatBaik:
+        return const Color(0xFFA7F3D0);
+      case FrostScoreCategory.baik:
+        return const Color(0xFFD9F99D);
+      case FrostScoreCategory.waspada:
+        return const Color(0xFFFDE68A);
+      case FrostScoreCategory.risikoTinggi:
+        return const Color(0xFFFECACA);
+    }
+  }
+
   static FrostScoreResult _formatResult(
     double pThermal,
     double pExposure,

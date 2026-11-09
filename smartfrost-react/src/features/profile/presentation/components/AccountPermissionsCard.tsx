@@ -13,9 +13,18 @@ export const AccountPermissionsCard: React.FC = () => {
         'Membuat serta mengekspor laporan',
       ];
 
+  const isAdmin = Boolean(user?.isAdmin || user?.role?.toLowerCase().includes('admin'));
+
   return (
     <div className="rounded-2xl bg-white border border-slate-200/80 p-6 shadow-2xs">
-      <h3 className="text-base font-bold text-slate-900">Kewenangan Anda</h3>
+      <div className="flex items-center justify-between">
+        <h3 className="text-base font-bold text-slate-900">Kewenangan Anda</h3>
+        {isAdmin && (
+          <span className="px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-900 rounded-full border border-amber-300">
+            Akses Administrator
+          </span>
+        )}
+      </div>
 
       <ul className="mt-4 space-y-3">
         {permissions.map((perm) => (
@@ -29,7 +38,9 @@ export const AccountPermissionsCard: React.FC = () => {
       </ul>
 
       <div className="mt-5 pt-4 border-t border-slate-100 text-[11.5px] leading-relaxed text-slate-400 font-medium">
-        Tidak dapat mengirim ikan, menerima atau menolak batch, maupun mengubah hasil inspeksi.
+        {isAdmin
+          ? 'Akun administrator memiliki wewenang penuh mengelola seluruh data master sistem (Ikan, Coolbox, Distributor, dan Akun Pengguna).'
+          : 'Tidak dapat mengirim ikan, menerima atau menolak batch, maupun mengubah hasil inspeksi.'}
       </div>
     </div>
   );

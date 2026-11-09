@@ -9,6 +9,7 @@ class CoolboxHistoryReading {
     this.airQualityValue,
     this.latitude,
     this.longitude,
+    this.frostScore,
     required this.timestamp,
   });
 
@@ -20,6 +21,7 @@ class CoolboxHistoryReading {
   final double? airQualityValue;
   final double? latitude;
   final double? longitude;
+  final double? frostScore;
   final DateTime timestamp;
 
   factory CoolboxHistoryReading.fromMap(String key, Map<String, dynamic> map) {
@@ -65,6 +67,7 @@ class CoolboxHistoryReading {
       ),
       latitude: toDoubleNullable(map['latitude']),
       longitude: toDoubleNullable(map['longitude']),
+      frostScore: toDoubleNullable(map['frostscore'] ?? map['frostScore']),
       timestamp: dt,
     );
   }

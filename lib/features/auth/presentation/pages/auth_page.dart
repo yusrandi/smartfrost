@@ -30,13 +30,12 @@ class _AuthPageState extends State<AuthPage> {
   bool _obscurePassword = true;
   bool _isLoading = false;
 
-  double? _customLat = -4.8378;
-  double? _customLng = 119.5372;
+  double? _customLat;
+  double? _customLng;
 
   final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _storeLocationController = TextEditingController(
-    text: 'Dermaga Maccini Baji',
-  );
+  final TextEditingController _storeLocationController =
+      TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
@@ -67,6 +66,13 @@ class _AuthPageState extends State<AuthPage> {
 
     if (!_isLogin && name.isEmpty) {
       setState(() => _errorMessage = 'Harap masukkan nama lengkap atau usaha.');
+      return;
+    }
+
+    if (!_isLogin && store.isEmpty) {
+      setState(
+        () => _errorMessage = 'Harap masukkan lokasi toko atau dermaga.',
+      );
       return;
     }
 
@@ -203,7 +209,7 @@ class _AuthPageState extends State<AuthPage> {
           uid: authUid,
         );
       } else {
-        AuthSession.instance.register(
+        await AuthSession.instance.register(
           name: name,
           email: email,
           password: password,
@@ -600,7 +606,9 @@ class _AuthPageState extends State<AuthPage> {
                                           const SizedBox(width: 6),
                                           Expanded(
                                             child: Text(
-                                              'Koordinat Peta: ${_customLat?.toStringAsFixed(4) ?? "-4.8378"}°, ${_customLng?.toStringAsFixed(4) ?? "119.5372"}°',
+                                              _customLat != null && _customLng != null
+                                                  ? 'Koordinat Peta: ${_customLat!.toStringAsFixed(4)}°, ${_customLng!.toStringAsFixed(4)}°'
+                                                  : 'Koordinat Peta: Otomatis sesuai lokasi',
                                               style: AppTypography.caption
                                                   .copyWith(
                                                     fontSize: 11,

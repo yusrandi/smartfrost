@@ -18,8 +18,18 @@ export const ProfileIdentityCard: React.FC = () => {
           {user?.agency || 'Dinas Perikanan Kabupaten Pangkep'}
         </p>
 
-        <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-50 text-[#0284C7] text-xs font-bold border border-sky-200/70">
-          <span className="h-1.5 w-1.5 rounded-full bg-[#0284C7]" />
+        <div
+          className={`mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
+            user?.isAdmin
+              ? 'bg-amber-50 text-amber-900 border-amber-300'
+              : 'bg-sky-50 text-[#0284C7] border-sky-200/70'
+          }`}
+        >
+          <span
+            className={`h-1.5 w-1.5 rounded-full ${
+              user?.isAdmin ? 'bg-amber-600' : 'bg-[#0284C7]'
+            }`}
+          />
           <span>{user?.role || 'Petugas pemantauan'}</span>
         </div>
       </div>

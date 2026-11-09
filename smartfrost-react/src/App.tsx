@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './features/auth/context/AuthContext';
 import { LoginPage } from './features/auth/presentation/pages/LoginPage';
 import { AppLayout } from './shared/components/layout/AppLayout';
@@ -8,19 +8,58 @@ import { MonitoringPage } from './features/monitoring/presentation/pages/Monitor
 import { FrostScorePage } from './features/frostscore/presentation/pages/FrostScorePage';
 import { RiskMapPage } from './features/risk_map/presentation/pages/RiskMapPage';
 import { ReportsPage } from './features/reports/presentation/pages/ReportsPage';
+import { MasterFishesPage } from './features/master_data/presentation/pages/MasterFishesPage';
+import { MasterCoolboxesPage } from './features/master_data/presentation/pages/MasterCoolboxesPage';
+import { MasterDistributorsPage } from './features/master_data/presentation/pages/MasterDistributorsPage';
+import { MasterUsersPage } from './features/master_data/presentation/pages/MasterUsersPage';
 import { ProfilePage } from './features/profile/presentation/pages/ProfilePage';
 import { NAVIGATION_ITEMS } from './core/constants/navigation';
 
+const ADMIN_TABS = [
+  'master_fishes',
+  'master_coolboxes',
+  'master_distributors',
+  'master_users',
+  'profile',
+];
+
+const OPERATOR_TABS = [
+  'dashboard',
+  'history',
+  'monitoring',
+  'frostscore',
+  'risk_map',
+  'reports',
+  'profile',
+];
+
 function AppContent() {
-  const { isAuthenticated } = useAuth();
-  const [activeTab, setActiveTab] = useState<string>('dashboard');
+  const { user, isAuthenticated } = useAuth();
+  const isAdmin = Boolean(user?.isAdmin || user?.role?.toLowerCase().includes('admin'));
+
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    return isAdmin ? 'master_fishes' : 'dashboard';
+  });
+
+  // Pastikan admin selalu fokus pada menu master_data atau profile, dan operator pada menu operasional
+  useEffect(() => {
+    if (isAdmin) {
+      if (!ADMIN_TABS.includes(activeTab)) {
+        setActiveTab('master_fishes');
+      }
+    } else {
+      if (!OPERATOR_TABS.includes(activeTab)) {
+        setActiveTab('dashboard');
+      }
+    }
+  }, [user, isAdmin, activeTab]);
 
   if (!isAuthenticated) {
     return <LoginPage />;
   }
 
   const currentTabItem = NAVIGATION_ITEMS.find((item) => item.id === activeTab);
-  const currentTabLabel = currentTabItem ? currentTabItem.label : 'Dashboard';
+  const currentTabLabel = currentTabItem ? currentTabItem.label : (isAdmin ? 'Master Ikan' : 'Dashboard');
 
   return (
     <AppLayout
@@ -40,6 +79,14 @@ function AppContent() {
         <RiskMapPage />
       ) : activeTab === 'reports' ? (
         <ReportsPage />
+      ) : activeTab === 'master_fishes' ? (
+        <MasterFishesPage />
+      ) : activeTab === 'master_coolboxes' ? (
+        <MasterCoolboxesPage />
+      ) : activeTab === 'master_distributors' ? (
+        <MasterDistributorsPage />
+      ) : activeTab === 'master_users' ? (
+        <MasterUsersPage />
       ) : activeTab === 'profile' ? (
         <ProfilePage />
       ) : (

@@ -126,7 +126,12 @@ export function buildDashboardData(snapshot: DataSnapshot) {
         d.coolboxId || (Array.isArray(d.coolboxIds) && d.coolboxIds[0]) || `SFR-CB-${String(idx + 1).padStart(3, '0')}`
       );
       const batchId = String(d.batchId || d.dispatchId || key);
-      let frostScore = typeof d.frostScore === 'number' ? d.frostScore : 90;
+      let frostScore =
+        typeof d.frostscore === 'number'
+          ? d.frostscore
+          : typeof d.frostScore === 'number'
+            ? d.frostScore
+            : 90;
       frostScore = Math.max(0, Math.min(100, frostScore));
 
       // Official SMART-FROST Risk Category:
@@ -360,15 +365,23 @@ export class DashboardRtdbDatasource {
               temp: p.temp,
             }));
 
-            // Official SMART-FROST Calculation from IoT Sensor History
-            // Jika history kosong tapi latestAirTemp ada, gunakan sampel latest agar suhu anomali langsung terdeteksi
-            const frostScore = FrostScoreCalculator.calculate(
-              pointsWithTs.length > 0
-                ? pointsWithTs.map((p) => ({ temp: p.temp }))
-                : latestAirTemp !== null
-                  ? [{ temp: latestAirTemp }]
-                  : []
-            );
+            // Ambil langsung nilai frostscore dari field tabel suhu /suhu/$coolboxId/latest (tanpa perhitungan)
+            const rawScoreFromDb = parseNumeric(latest.frostscore ?? latest.frostScore);
+            let frostScore: FrostScoreResult | undefined;
+            if (rawScoreFromDb !== null) {
+              const clamped = Math.max(0, Math.min(100, rawScoreFromDb));
+              const pTotal = Number((100 - clamped).toFixed(2));
+              frostScore = {
+                score: Number(clamped.toFixed(2)),
+                pTotal,
+                pThermal: pTotal,
+                pExposure: pTotal,
+                pStability: pTotal,
+                pAnomaly: pTotal,
+                status: FrostScoreCalculator.getCategory(clamped),
+                badgeStyle: FrostScoreCalculator.getBadgeStyle(clamped),
+              };
+            }
 
             map[coolboxKey] = {
               coolboxId: coolboxKey,

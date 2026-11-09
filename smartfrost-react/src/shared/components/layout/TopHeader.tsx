@@ -11,11 +11,13 @@ interface TopHeaderProps {
 
 export const TopHeader: React.FC<TopHeaderProps> = ({
   currentTabLabel,
-  parentBreadcrumb = 'Ruang pantau',
+  parentBreadcrumb,
   onNavigateProfile,
   onToggleMobileMenu,
 }) => {
   const { user, logout } = useAuth();
+  const isAdmin = Boolean(user?.isAdmin || user?.role?.toLowerCase().includes('admin'));
+  const effectiveParentBreadcrumb = parentBreadcrumb || (isAdmin ? 'Tata kelola master' : 'Ruang pantau');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -58,7 +60,7 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
 
         {/* Breadcrumb Navigation */}
         <nav className="flex items-center gap-1.5 text-xs truncate">
-          <span className="text-slate-500 font-medium hidden sm:inline">{parentBreadcrumb}</span>
+          <span className="text-slate-500 font-medium hidden sm:inline">{effectiveParentBreadcrumb}</span>
           <span className="text-slate-400 font-light hidden sm:inline">/</span>
           <span className="font-bold text-slate-900 truncate">{currentTabLabel}</span>
         </nav>
@@ -89,16 +91,22 @@ export const TopHeader: React.FC<TopHeaderProps> = ({
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
             className="flex items-center gap-2 sm:gap-3 pl-2 border-l border-slate-200 hover:opacity-90 transition-opacity cursor-pointer text-left"
           >
-            <div className="flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-full bg-cyan-100 font-black text-xs text-cyan-800 shadow-2xs border border-cyan-200/60">
-              {user?.initials || 'RH'}
+            <div
+              className={`flex h-8 w-8 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-full font-black text-xs shadow-2xs border ${
+                isAdmin
+                  ? 'bg-amber-100 text-amber-900 border-amber-300'
+                  : 'bg-cyan-100 text-cyan-800 border-cyan-200/60'
+              }`}
+            >
+              {user?.initials || (isAdmin ? 'AD' : 'RH')}
             </div>
             <div className="hidden md:block text-left leading-tight">
               <div className="text-xs font-bold text-slate-900 flex items-center gap-1">
-                <span>{user?.name || 'Rahmat Hidayat'}</span>
+                <span>{user?.name || (isAdmin ? 'Administrator' : 'Petugas Pemantauan')}</span>
                 <ChevronDown className="h-3 w-3 text-slate-400" />
               </div>
               <div className="text-[11px] text-slate-500">
-                {user?.role || 'Petugas pemantauan'}
+                {user?.role || (isAdmin ? 'Administrator Sistem' : 'Petugas pemantauan')}
               </div>
             </div>
           </button>

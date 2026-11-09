@@ -9,7 +9,7 @@ import '../../../../core/services/frost_score_calculator.dart';
 import '../../../../core/widgets/app_card.dart';
 import '../../../../core/widgets/status_badge.dart';
 import '../../data/services/firestore_dispatch_service.dart';
-import '../../domain/models/coolbox_history_reading.dart';
+import '../../domain/models/coolbox_temperature_data.dart';
 import '../../domain/models/new_dispatch_data.dart';
 import '../widgets/dispatch_temperature_history_card.dart';
 import '../widgets/dispatch_tracking_map_card.dart';
@@ -187,39 +187,22 @@ class DispatchTrackingPage extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.lg),
 
-            // FROSTSCORE Live Calculation & Risk Card
-            StreamBuilder<List<CoolboxHistoryReading>>(
+            // FROSTSCORE Live Telemetry Card (Directly from database field frostscore)
+            StreamBuilder<CoolboxTemperatureData?>(
               stream: FirestoreDispatchService.instance
-                  .streamCoolboxTemperatureHistory(
+                  .streamCoolboxLatest(
                     data.coolboxId,
                     batchId: data.batchId,
                     isReceiver: false,
                   ),
               builder: (context, snapshot) {
-                final readings = snapshot.data ?? const [];
-                final hasReadings = readings.isNotEmpty;
-
-                final FrostScoreResult result;
-                if (hasReadings) {
-                  final temps = readings.map((r) => r.airTemperatureC).toList();
-                  result = FrostScoreCalculator.calculateFromTemperatures(
-                    temps,
-                  );
-                } else {
-                  result = const FrostScoreResult(
-                    score: 96.0,
-                    pTotal: 4.0,
-                    pThermal: 0.0,
-                    pExposure: 0.0,
-                    pStability: 0.0,
-                    pAnomaly: 0.0,
-                    category: FrostScoreCategory.sangatBaik,
-                  );
-                }
-
-                final scoreColor = result.statusColor;
-                final bgCardColor = result.badgeBackground;
-                final borderCardColor = result.badgeBorder;
+                final latest = snapshot.data;
+                final double score = latest?.frostScore ?? 96.0;
+                final category = FrostScoreCalculator.getCategory(score);
+                final scoreColor = FrostScoreCalculator.getStatusColor(score);
+                final bgCardColor = FrostScoreCalculator.getBadgeBackground(score);
+                final borderCardColor = FrostScoreCalculator.getBadgeBorder(score);
+                final displayScore = score.round();
 
                 return Container(
                   padding: const EdgeInsets.all(AppSpacing.md + 2),
@@ -256,9 +239,7 @@ class DispatchTrackingPage extends StatelessWidget {
                             ),
                             const SizedBox(height: 6),
                             Text(
-                              hasReadings
-                                  ? '${result.scoreInt} / 100'
-                                  : '96 / 100',
+                              '$displayScore / 100',
                               textAlign: TextAlign.center,
                               style: AppTypography.cardTitle.copyWith(
                                 fontSize: 16,
@@ -282,9 +263,7 @@ class DispatchTrackingPage extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              hasReadings
-                                  ? '${result.category.label} (${result.scoreInt})'
-                                  : 'Sangat Baik (Terverifikasi Awal)',
+                              '${category.label} (${score.toStringAsFixed(1)})',
                               style: AppTypography.cardTitle.copyWith(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w700,
@@ -293,9 +272,7 @@ class DispatchTrackingPage extends StatelessWidget {
                             ),
                             const SizedBox(height: 3),
                             Text(
-                              hasReadings
-                                  ? 'Penalti total: ${result.pTotal.toStringAsFixed(1)} (Thermal 40%, Exp 25%, Stab 15%, Anom 20%).'
-                                  : 'Telemetri cold chain terhubung real-time dengan batas aman ≤4,0°C.',
+                              'Nilai FrostScore telemetri sensor: ${score.toStringAsFixed(2)} / 100.',
                               style: AppTypography.caption.copyWith(
                                 color: AppColors.textSecondary,
                                 fontSize: 11,
@@ -304,11 +281,10 @@ class DispatchTrackingPage extends StatelessWidget {
                             ),
                             const SizedBox(height: 6),
                             Text(
-                              'Formula: FrostScore = max(0, 100 - P_total) sesuai regulasi SMART-FROST.',
+                              'Data live dari node /suhu/${data.coolboxId}/latest.',
                               style: AppTypography.caption.copyWith(
                                 color: AppColors.textTertiary,
-                                fontSize: 10,
-                                fontStyle: FontStyle.italic,
+                                fontSize: 9.5,
                               ),
                             ),
                           ],
