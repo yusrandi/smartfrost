@@ -5,8 +5,8 @@ import { STATIC_USERS } from '../../data/static_users';
 
 export const LoginPage: React.FC = () => {
   const { login, loginAs } = useAuth();
-  const [identifier, setIdentifier] = useState('rahmat@dinas-contoh.id');
-  const [password, setPassword] = useState('password123');
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -174,7 +174,7 @@ export const LoginPage: React.FC = () => {
           </form>
 
           {/* Quick Login with Static Users */}
-          <div className="mt-7 pt-6 border-t border-slate-100">
+          {/* <div className="mt-7 pt-6 border-t border-slate-100">
             <div className="flex items-center justify-between mb-2.5">
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
                 <Sparkles className="h-3 w-3 text-sky-500" />
@@ -227,7 +227,7 @@ export const LoginPage: React.FC = () => {
                 </button>
               ))}
             </div>
-          </div>
+          </div> */}
         </div>
       </div>
 
