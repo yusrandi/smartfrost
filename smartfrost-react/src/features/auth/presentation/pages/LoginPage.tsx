@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { ArrowRight, Eye, EyeOff, Mail, ShieldAlert, Sparkles } from 'lucide-react';
+import { ArrowRight, Eye, EyeOff, Mail, ShieldAlert } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { STATIC_USERS } from '../../data/static_users';
+// import { STATIC_USERS } from '../../data/static_users';
 
 export const LoginPage: React.FC = () => {
-  const { login, loginAs } = useAuth();
+  const { login } = useAuth();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -26,14 +26,14 @@ export const LoginPage: React.FC = () => {
     }, 400);
   };
 
-  const handleQuickLogin = (userId: string) => {
-    const user = STATIC_USERS.find((u) => u.id === userId);
-    if (user) {
-      setIdentifier(user.email);
-      setPassword(user.password);
-      loginAs(user.id);
-    }
-  };
+//   const handleQuickLogin = (userId: string) => {
+//     const user = STATIC_USERS.find((u) => u.id === userId);
+//     if (user) {
+//       setIdentifier(user.email);
+//       setPassword(user.password);
+//       loginAs(user.id);
+//     }
+//   };
 
   return (
     <div className="min-h-screen bg-radial from-[#F0F7FB] via-[#F8FAFC] to-[#EDF4F9] flex flex-col justify-between p-4 sm:p-6 text-slate-800 antialiased font-sans select-none">
